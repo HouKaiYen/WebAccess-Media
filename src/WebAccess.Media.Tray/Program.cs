@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Net;
 using System.Net.Http.Json;
 
 namespace WebAccess.Media.Tray;
@@ -9,24 +8,32 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
-        if (args.Length != 1 || !Uri.TryCreate(args[0], UriKind.Absolute, out Uri? address) ||
-            !address.IsLoopback || address.Scheme is not ("http" or "https"))
+        if (args.Length != 3 || !Uri.TryCreate(args[0], UriKind.Absolute, out Uri? address) ||
+            !address.IsLoopback || address.Scheme is not ("http" or "https") ||
+            !int.TryParse(args[1], out int processId) || processId <= 0 ||
+            !EventWaitHandle.TryOpenExisting(args[2], out EventWaitHandle? shutdown))
         {
             return;
         }
 
-        using Mutex instance = new(false, $@"Local\WebAccess.Media.Tray.{address.Port}", out bool created);
-        if (!created)
+        using (shutdown)
+        using (Process? service = FindProcess(processId))
         {
-            return;
+            if (service is not null)
+            {
+                Run(address, service, shutdown);
+            }
         }
+    }
 
+    private static void Run(Uri address, Process service, EventWaitHandle shutdown)
+    {
         ApplicationConfiguration.Initialize();
         using ApplicationContext context = new();
         using ContextMenuStrip menu = new();
         ToolStripMenuItem status = new("正在檢查服務…") { Enabled = false };
         ToolStripMenuItem open = new("開啟日常管理");
-        ToolStripMenuItem exit = new("結束通知區圖示");
+        ToolStripMenuItem exit = new("結束 WebAccess Media");
         menu.Items.AddRange([status, open, new ToolStripSeparator(), exit]);
         using NotifyIcon icon = new()
         {
@@ -44,11 +51,23 @@ internal static class Program
         timer.Tick += async (_, _) =>
         {
             timer.Stop();
+            if (service.HasExited)
+            {
+                icon.Visible = false;
+                context.ExitThread();
+                return;
+            }
             try
             {
-                string text = await ReadStatusAsync(client);
-                status.Text = text;
-                icon.Text = $"WebAccess Media · {text}";
+                if (exit.Enabled)
+                {
+                    string text = await ReadStatusAsync(client);
+                    if (exit.Enabled)
+                    {
+                        status.Text = text;
+                        icon.Text = $"WebAccess Media · {text}";
+                    }
+                }
             }
             finally
             {
@@ -61,18 +80,33 @@ internal static class Program
         open.Click += (_, _) => OpenSettings(address);
         icon.MouseDoubleClick += (_, eventArgs) =>
         {
-            if (eventArgs.Button == MouseButtons.Left)
+            if (eventArgs.Button == MouseButtons.Left && open.Enabled)
             {
                 OpenSettings(address);
             }
         };
         exit.Click += (_, _) =>
         {
-            icon.Visible = false;
-            context.ExitThread();
+            exit.Enabled = false;
+            open.Enabled = false;
+            status.Text = "正在結束服務…";
+            icon.Text = $"WebAccess Media · {status.Text}";
+            shutdown.Set();
         };
         timer.Start();
         Application.Run(context);
+    }
+
+    private static Process? FindProcess(int processId)
+    {
+        try
+        {
+            return Process.GetProcessById(processId);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
     }
 
     private static async Task<string> ReadStatusAsync(HttpClient client)
