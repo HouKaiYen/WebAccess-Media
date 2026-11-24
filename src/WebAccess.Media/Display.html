@@ -43,6 +43,10 @@ body.image-only #plan-frame { position: fixed; inset: 0; background: #000; }
 body.image-only #plan { width: 100%; height: 100%; max-height: none; object-fit: contain; }
 body.image-only #title, body.image-only #status { display: none; }
 @keyframes ticker { to { transform: translateX(-100%); } }
+@media (prefers-reduced-motion: reduce) {
+  #marquee { white-space: normal; overflow-wrap: anywhere; }
+  #marquee span { display: block; padding: .3rem .5rem; animation: none; text-align: center; }
+}
 </style>
 <main>
   <h1 id="title">正在取得顯示狀態</h1>
@@ -104,6 +108,11 @@ function scheduleAlarmFit() {
     plan.style.height = Math.max(1, Math.floor(plan.naturalHeight * scale)) + 'px';
   });
 }
+function showStatus(text) {
+  if (status.textContent === text) return;
+  status.textContent = text;
+  scheduleAlarmFit();
+}
 window.addEventListener('resize', scheduleAlarmFit);
 plan.addEventListener('load', scheduleAlarmFit);
 if (document.fonts) document.fonts.ready.then(scheduleAlarmFit);
@@ -153,13 +162,19 @@ async function refresh() {
     if (!response.ok) throw new Error();
     const state = await response.json();
     const alarm = preview ? null : state.alarm;
-    document.body.classList.toggle('alarm-active', !!alarm);
     setStandby(alarm ? null : state.playlist);
     const url = alarm && alarm.floorPlanUrl;
     const appearance = state.marker;
-    title.textContent = alarm ? (alarm.description || alarm.point) : '待機中';
-    alarmTextSize = appearance?.alarmTextSize || 48;
+    const titleText = alarm ? (alarm.description || alarm.point) : '待機中';
+    const nextTextSize = appearance?.alarmTextSize || 48;
     const imageOnly = !!(url && appearance && appearance.imageOnly);
+    const fitChanged = document.body.classList.contains('alarm-active') !== !!alarm ||
+      document.body.classList.contains('image-only') !== imageOnly ||
+      title.textContent !== titleText || alarmTextSize !== nextTextSize || frame.hidden !== !url ||
+      (!!url && plan.getAttribute('src') !== url);
+    document.body.classList.toggle('alarm-active', !!alarm);
+    if (title.textContent !== titleText) title.textContent = titleText;
+    alarmTextSize = nextTextSize;
     document.body.classList.toggle('image-only', imageOnly);
     frame.hidden = !url;
     if (url && plan.getAttribute('src') !== url) plan.src = url;
@@ -177,11 +192,11 @@ async function refresh() {
     }
     const lastSuccess = state.lastSuccessAt ? '，最後更新 ' + new Date(state.lastSuccessAt).toLocaleString('zh-TW') : '';
     const messages = { disconnected: 'WebAccess 連線異常' + lastSuccess, connecting: '正在連線至 WebAccess', unconfigured: '尚未設定 WebAccess' };
-    status.textContent = preview ? '' : messages[state.connectionStatus] || '';
+    showStatus(preview ? '' : messages[state.connectionStatus] || '');
+    if (fitChanged) scheduleAlarmFit();
   } catch {
-    status.textContent = '顯示服務連線中斷';
+    showStatus('顯示服務連線中斷');
   } finally {
-    scheduleAlarmFit();
     setTimeout(refresh, 2000);
   }
 }

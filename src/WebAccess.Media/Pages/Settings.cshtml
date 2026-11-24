@@ -40,13 +40,17 @@
         #preview-marquee.top { top: 0; bottom: auto; }
         #preview-marquee span { display: inline-block; padding-left: 100%; animation: preview-scroll 12s linear infinite; }
         @@keyframes preview-scroll { to { transform: translateX(-100%); } }
+        @@media (prefers-reduced-motion: reduce) {
+            #preview-marquee { white-space: normal; overflow-wrap: anywhere; }
+            #preview-marquee span { display: block; padding: .3rem .5rem; animation: none; text-align: center; }
+        }
         @@media (max-width: 640px) { .options { grid-template-columns: 1fr; } header { position: static; } }
 
         main { max-width: 1100px; margin: auto; padding: 1.25rem; }
 </style>
 }
 @section Actions { <button type="submit" form="playlist-form" class="primary">儲存設定</button> }
-<main>
+<main id="main-content" tabindex="-1">
     <div class="intro toolbar">
         <div><h1>管理待機播放內容</h1><p>新增圖片或影片，設定播放順序與圖片停留時間。</p></div>
         <span id="draft-status" class="muted" role="status">已儲存</span>
@@ -62,7 +66,7 @@
         <section class="card">
             <div class="section-heading toolbar">
                 <div><h2>播放清單 <span class="count">@Model.Items.Count</span></h2><p>圖片依序循環播放，影片播完後切換。</p></div>
-                <input form="upload-form" id="upload-media" type="file" name="media" accept=".png,.jpg,.jpeg,.gif,.mp4" hidden>
+                <input form="upload-form" id="upload-media" type="file" name="media" aria-label="新增媒體檔案" accept=".png,.jpg,.jpeg,.gif,.mp4" hidden>
                 <button type="button" id="choose-media">＋ 新增媒體</button>
             </div>
             <p class="file-note">支援 PNG、JPEG、GIF、MP4。圖片與 GIF 上限 20 MB，MP4 上限 100 MB。移除項目並儲存後，會刪除未被使用的本機副本。</p>
@@ -83,7 +87,7 @@
                         }
                         else
                         {
-                            <img class="thumb" src="/media/@file" alt="">
+                            <img class="thumb" src="/media/@file" alt="" width="76" height="48" loading="lazy">
                         }
                         <label>名稱 <input asp-for="Items[index].Name" maxlength="200" required></label>
                         @if (file.EndsWith(".mp4", StringComparison.Ordinal))
@@ -128,7 +132,14 @@ function markDirty() {
     document.getElementById('draft-status').textContent = '有未儲存變更';
 }
 playlistForm.addEventListener('input', markDirty);
-playlistForm.addEventListener('submit', () => { dirty = false; });
+playlistForm.addEventListener('submit', event => {
+    const removedCount = playlistForm.querySelectorAll('input[name=remove]').length;
+    if (removedCount && !window.confirm('確定要儲存並移除 ' + removedCount + ' 項媒體？未被引用的本機副本也會刪除。')) {
+        event.preventDefault();
+        return;
+    }
+    dirty = false;
+});
 window.addEventListener('beforeunload', event => {
     if (!dirty) return;
     event.preventDefault();
@@ -177,6 +188,8 @@ document.getElementById('open-preview').addEventListener('click', () => {
             media.autoplay = true;
             media.loop = rows.length === 1;
             media.onended = next;
+        } else {
+            media.alt = row.querySelector('input[name$=".Name"]').value;
         }
         stage.replaceChildren(media);
         media.src = '/media/' + encodeURIComponent(row.dataset.file);
