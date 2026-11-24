@@ -3,6 +3,10 @@
 @addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
 @{ Layout = "_ManagementLayout"; ViewData["Title"] = "WebAccess 連線"; }
 
+@section Actions {
+    <button type="submit" form="connection-form" class="primary">儲存並開始監控</button>
+}
+
 @section Styles {
 <style>
         form { display: grid; gap: .9rem; padding: 1.5rem; }
@@ -23,7 +27,7 @@
     {
         <p class="feedback @(Model.IsSuccessful ? "success" : "error")" role="status">@feedback</p>
     }
-    <form class="card" method="post" asp-page-handler="Save">
+    <form class="card" id="connection-form" method="post" asp-page-handler="Save">
         <label>WebAccess IP 位址
             <input asp-for="Input.Ip" required placeholder="192.168.1.100" spellcheck="false">
             <small>程式會自動使用 HTTP 並加上 /WaWebService/Json。</small>
@@ -36,7 +40,6 @@
         </label>
         <div class="actions">
             <button type="submit" asp-page-handler="Test">測試連線</button>
-            <button type="submit" class="primary">儲存並開始監控</button>
         </div>
     </form>
 </main>
