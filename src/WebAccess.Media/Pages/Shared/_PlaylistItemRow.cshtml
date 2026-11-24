@@ -1,0 +1,29 @@
+@model (int Index, WebAccess.Media.Pages.SettingsModel.ItemInput Item)
+@{
+    string prefix = $"Items[{Model.Index}]";
+    bool isVideo = Model.Item.File.EndsWith(".mp4", StringComparison.Ordinal);
+}
+<div class="row" data-file="@Model.Item.File">
+    <input type="hidden" name="Items.Index" value="@Model.Index">
+    <input type="hidden" name="@($"{prefix}.File")" value="@Model.Item.File">
+    @if (isVideo)
+    {
+        <span class="thumb">MP4</span>
+    }
+    else
+    {
+        <img class="thumb" src="/media/@Model.Item.File" alt="" width="76" height="48" loading="lazy">
+    }
+    <label>名稱 <input name="@($"{prefix}.Name")" value="@Model.Item.Name" maxlength="200" required></label>
+    @if (isVideo)
+    {
+        <span class="muted">播完後切換</span><input name="@($"{prefix}.Seconds")" value="@Model.Item.Seconds" type="hidden">
+    }
+    else
+    {
+        <label>停留秒數 <input name="@($"{prefix}.Seconds")" value="@Model.Item.Seconds" type="number" min="3" max="300" required></label>
+    }
+    <button type="button" data-move="up" aria-label="上移">↑</button>
+    <button type="button" data-move="down" aria-label="下移">↓</button>
+    <button type="button" data-remove>移除</button>
+</div>

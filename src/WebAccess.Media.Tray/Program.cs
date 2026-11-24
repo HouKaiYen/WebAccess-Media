@@ -10,7 +10,7 @@ internal static class Program
     {
         if (args.FirstOrDefault() == "--configure-startup")
         {
-            StartupSetup.Configure(args);
+            Environment.ExitCode = StartupSetup.Configure(args);
             return;
         }
         if (args.Length == 3 && args[0] == "--watch-startup" && TryReadAddress(args[1], out Uri? watched) &&

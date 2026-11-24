@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
@@ -20,37 +21,54 @@ public sealed class SettingsModel(PlayerSettings storage) : PageModel
         IsMuted = playlist.IsMuted;
         MarqueeAtTop = playlist.MarqueeAtTop;
         Marquee = playlist.Marquee;
-        Items = playlist.Items.Select(item => new ItemInput { File = item.File, Name = item.Name, Seconds = item.Seconds }).ToList();
+        Items = playlist.Items.Select(ItemInput.FromPlaylistItem).ToList();
     }
 
-    public async Task<IActionResult> OnPostUploadAsync(IFormFile? media)
+    public async Task<IActionResult> OnPostUploadAsync(IFormFile? media, int? revision)
     {
         Playlist playlist = storage.Read();
+        bool wantsRow = Request.Headers["X-Playlist-Upload"] == "row";
+        if ((wantsRow || revision.HasValue) && revision != playlist.Revision)
+        {
+            return UploadError("清單已在其他地方更新，請確認最新清單後再上傳。", 409, wantsRow);
+        }
         if (media is null || playlist.Items.Length >= 200)
         {
-            Feedback = "請選取媒體，播放清單最多可加入 200 項。";
-            return RedirectToPage();
+            return UploadError("請選取媒體，播放清單最多可加入 200 項。", 400, wantsRow);
         }
 
         try
         {
             string file = await storage.UploadAsync(media, HttpContext.RequestAborted);
             string name = Path.GetFileNameWithoutExtension(media.FileName);
+            if (string.IsNullOrWhiteSpace(name)) name = "未命名媒體";
             PlaylistItem item = new(file, name.Length <= 200 ? name : name[..200], 10);
             if (storage.Save(playlist with { Items = [.. playlist.Items, item] }))
             {
+                if (wantsRow)
+                {
+                    Response.Headers["X-Playlist-Revision"] = (playlist.Revision + 1).ToString(CultureInfo.InvariantCulture);
+                    return Partial("_PlaylistItemRow", (playlist.Items.Length, ItemInput.FromPlaylistItem(item)));
+                }
                 Feedback = "已加入播放清單。";
             }
             else
             {
                 storage.RemoveMedia(file);
-                Feedback = "清單已更新，請重新上傳。";
+                return UploadError("清單已在其他地方更新，請確認最新清單後再上傳。", 409, wantsRow);
             }
         }
         catch (InvalidDataException error)
         {
-            Feedback = error.Message;
+            return UploadError(error.Message, 400, wantsRow);
         }
+        return RedirectToPage();
+    }
+
+    private IActionResult UploadError(string message, int status, bool wantsRow)
+    {
+        if (wantsRow) return new JsonResult(new { message }) { StatusCode = status };
+        Feedback = message;
         return RedirectToPage();
     }
 
@@ -103,5 +121,8 @@ public sealed class SettingsModel(PlayerSettings storage) : PageModel
         public string File { get; set; } = "";
         public string Name { get; set; } = "";
         public int Seconds { get; set; }
+
+        public static ItemInput FromPlaylistItem(PlaylistItem item) =>
+            new() { File = item.File, Name = item.Name, Seconds = item.Seconds };
     }
 }

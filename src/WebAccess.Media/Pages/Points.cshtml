@@ -26,6 +26,7 @@
     .point-row { display: flex; align-items: center; gap: .25rem; }
     .point-row a { flex: 1; min-width: 0; }
     .point-row button { padding: .2rem .45rem; color: #a42c3e; font-size: .8rem; white-space: nowrap; }
+    .point-row button, .floor-delete { min-height: 32px; }
     main { padding: 1.25rem; min-width: 0; }
     .editor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 290px); gap: 1rem; }
     .canvas { min-height: clamp(350px, 65vh, 620px); display: grid; align-self: start; place-items: center; padding: 1.15rem; text-align: center; background: radial-gradient(circle, #d9e3f1 1px, transparent 1px) 0 0 / 18px 18px, var(--panel); }
@@ -37,6 +38,10 @@
     .floor-card { display: grid; gap: .35rem; padding: .35rem; overflow: hidden; }
     .floor-entry { display: grid; align-content: start; gap: .25rem; min-width: 0; }
     .floor-delete { justify-self: end; padding: .15rem .4rem; font-size: .8rem; color: #a42c3e; }
+    @@media (pointer: coarse) {
+        .point-row { gap: .5rem; }
+        .point-row button, .floor-delete { min-width: 44px; min-height: 44px; padding-inline: .65rem; }
+    }
     .floor-card img { width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: contain; background: var(--background); }
     .floor-card span { text-overflow: ellipsis; overflow: hidden; white-space: nowrap; font-size: .8rem; }
     .icon-option { display: flex; align-items: center; gap: .4rem; margin: 0; padding: .35rem; border: 1px solid var(--border); border-radius: .4rem; font-size: .85rem; }
@@ -50,6 +55,8 @@
     .coordinates { display: grid; grid-template-columns: 1fr 1fr; gap: .55rem; }
     fieldset { border: 1px solid var(--line); border-radius: .5rem; margin: .25rem 0 1rem; padding: .7rem; min-width: 0; }
     .remove { margin-top: .6rem; }
+    #point-save-status:empty { display: none; }
+    #point-field-error { color: #a42c3e; }
     @@media (max-width: 800px) { .editor { grid-template-columns: 1fr; } }
     @@media (max-width: 560px) { .workspace { grid-template-columns: 1fr; } aside { border-right: 0; border-bottom: 1px solid var(--line); } .canvas { min-height: 240px; } }
     @@media (min-width: 801px) {
@@ -132,6 +139,8 @@
         {
             <p class="feedback" role="status">@feedback</p>
         }
+        <p id="point-save-status" class="feedback" role="status"></p>
+        <p id="point-reload" hidden><a href="">重新載入最新設定（會捨棄草稿）</a></p>
         <div class="editor">
             <div class="canvas card">
                 <p id="empty-plan" class="muted" hidden="@(Model.Selected is not null)">上傳平面圖後，點選圖面設定告警位置。</p>
@@ -269,7 +278,6 @@ function markPointDirty() {
 }
 pointForm.addEventListener('input', markPointDirty);
 pointForm.addEventListener('change', markPointDirty);
-pointForm.addEventListener('submit', () => { pointDirty = false; });
 window.addEventListener('beforeunload', event => {
     if (!pointDirty) return;
     event.preventDefault();
@@ -513,6 +521,62 @@ const libraryStatus = document.getElementById('floor-status');
 const revision = document.getElementById('point-revision');
 const savePoint = document.getElementById('save-point');
 let libraryBusy = false;
+let pointSaving = false;
+const saveStatus = document.getElementById('point-save-status');
+const reloadPoint = document.getElementById('point-reload');
+let invalidPointField = null;
+let fieldDescription = null;
+function clearPointError() {
+    document.getElementById('point-field-error')?.remove();
+    if (!invalidPointField) return;
+    invalidPointField.removeAttribute('aria-invalid');
+    if (fieldDescription) invalidPointField.setAttribute('aria-describedby', fieldDescription);
+    else invalidPointField.removeAttribute('aria-describedby');
+    invalidPointField = null;
+}
+pointForm.addEventListener('input', clearPointError);
+pointForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (pointSaving || libraryBusy) return;
+    clearPointError();
+    reloadPoint.hidden = true;
+    const body = new FormData(pointForm);
+    pointSaving = true;
+    pointForm.inert = true;
+    savePoint.disabled = true;
+    saveStatus.textContent = '正在儲存測點…';
+    try {
+        const response = await fetch(pointForm.action, { method: 'POST', headers: { Accept: 'application/json' }, body });
+        const data = await response.json();
+        if (response.ok && data.redirect) {
+            pointDirty = false;
+            location.assign(data.redirect);
+            return;
+        }
+        saveStatus.textContent = data.message || '無法儲存，請重試。草稿仍保留。';
+        reloadPoint.hidden = response.status !== 409;
+        if (data.field) {
+            invalidPointField = Array.from(pointForm.elements).find(field => field.name === data.field && !field.hidden &&
+                !field.disabled && field.type !== 'hidden');
+            if (invalidPointField) {
+                const error = document.createElement('p');
+                error.id = 'point-field-error';
+                error.textContent = saveStatus.textContent;
+                fieldDescription = invalidPointField.getAttribute('aria-describedby');
+                invalidPointField.setAttribute('aria-invalid', 'true');
+                invalidPointField.setAttribute('aria-describedby', [fieldDescription, error.id].filter(Boolean).join(' '));
+                (invalidPointField.labels?.[0] || invalidPointField).after(error);
+            }
+        }
+    } catch {
+        saveStatus.textContent = '無法連線或上傳檔案過大。請確認後重試，草稿仍保留。';
+    } finally {
+        pointSaving = false;
+        pointForm.inert = false;
+        savePoint.disabled = false;
+        invalidPointField?.focus();
+    }
+});
 function renderLibrary(images) {
     const selectedFile = sharedFile.value;
     sharedFile.replaceChildren(sharedFile.options[0]);
@@ -535,7 +599,7 @@ function renderLibrary(images) {
     updatePlan();
 }
 async function updateLibrary(endpoint, body, pending) {
-    if (libraryBusy) return;
+    if (libraryBusy || pointSaving) return;
     libraryBusy = true;
     uploadInput.disabled = true;
     savePoint.disabled = true;

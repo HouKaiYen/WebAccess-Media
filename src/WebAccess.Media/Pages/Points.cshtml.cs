@@ -152,55 +152,85 @@ public sealed class PointsModel(
         string? alarmText = null, int alarmTextSize = PointPlan.DefaultAlarmTextSize, int iconSize = PointPlan.DefaultIconSize,
         string? suggestedAlarmText = null)
     {
-        if (!ModelState.IsValid || string.IsNullOrWhiteSpace(point) || point.Length > 256 ||
-            x is < 0 or > 100 || y is < 0 or > 100 ||
-            (alarmText?.Length ?? 0) > 500 ||
-            alarmTextSize is < PointPlan.MinAlarmTextSize or > PointPlan.MaxAlarmTextSize ||
-            iconSize is < PointPlan.MinIconSize or > PointPlan.MaxIconSize ||
-            !AlarmIcons.Any(option => option.Value == icon) ||
-            (image is not null && !IsFloorImage(image)) || (customIcon is not null && !IsFloorImage(customIcon)))
+        string? invalidField = ModelState.FirstOrDefault(entry => entry.Value?.Errors.Count > 0).Key;
+        if (invalidField is not null)
         {
-            Feedback = "請確認測點、警報文字、字級、座標與圖示大小，圖片限 PNG 或 JPEG。";
-            return RedirectToPage();
+            return PointError("請確認此欄位的格式。", 400, point, isNew, invalidField);
+        }
+        if (string.IsNullOrWhiteSpace(point) || point.Length > 256)
+        {
+            return PointError("請輸入測點 Name，最多 256 個字元。", 400, point, isNew, "point");
+        }
+        if (x is < 0 or > 100 || y is < 0 or > 100)
+        {
+            return PointError("座標必須介於 0% 與 100%。", 400, point, isNew, x is < 0 or > 100 ? "x" : "y");
+        }
+        if ((alarmText?.Length ?? 0) > 500)
+        {
+            return PointError("警報文字最多 500 個字元。", 400, point, isNew, "alarmText");
+        }
+        if (alarmTextSize is < PointPlan.MinAlarmTextSize or > PointPlan.MaxAlarmTextSize)
+        {
+            return PointError($"文字大小必須介於 {PointPlan.MinAlarmTextSize} 與 {PointPlan.MaxAlarmTextSize} px。", 400, point, isNew, "alarmTextSize");
+        }
+        if (iconSize is < PointPlan.MinIconSize or > PointPlan.MaxIconSize)
+        {
+            return PointError($"圖示大小必須介於 {PointPlan.MinIconSize} 與 {PointPlan.MaxIconSize} px。", 400, point, isNew, "iconSize");
+        }
+        if (!AlarmIcons.Any(option => option.Value == icon))
+        {
+            return PointError("請選擇圖示樣式。", 400, point, isNew, "icon");
+        }
+        if (image is not null && !IsFloorImage(image))
+        {
+            return PointError("底圖限 PNG 或 JPEG。", 400, point, isNew, "image");
+        }
+        if (customIcon is not null && !IsFloorImage(customIcon))
+        {
+            return PointError("自訂圖示限 PNG 或 JPEG。", 400, point, isNew, "customIcon");
         }
 
         Playlist playlist = storage.Read();
         string name = point.Trim();
         PointPlan? previous = playlist.PointPlans?.FirstOrDefault(plan => plan.Point == name);
-        if (revision != playlist.Revision || (isNew && previous is not null))
+        if (revision != playlist.Revision)
         {
-            Feedback = revision != playlist.Revision ? "設定已更新，請確認最新內容再儲存。" : "這個測點 Name 已存在。";
-            return RedirectToPage(new { selected = name, add = isNew });
+            return PointError("設定已在其他地方更新。請先確認最新內容。", 409, name, isNew);
+        }
+        if (isNew && previous is not null)
+        {
+            return PointError("這個測點 Name 已存在，請改用其他名稱。", 400, name, isNew, "point");
         }
 
         FloorImage? shared = GetFloorImages(playlist).FirstOrDefault(item => item.File == sharedFile);
         string? selectedFile = shared?.File ?? previous?.File;
         if (image is null && selectedFile is null)
         {
-            Feedback = "新增測點時請選取共用平面圖或上傳一張圖片。";
-            return RedirectToPage(new { add = true });
+            return PointError("請選取共用平面圖或上傳一張圖片。", 400, name, isNew, "sharedFile");
         }
         string? iconFile = previous?.IconFile;
         if (icon == "custom" && customIcon is null && iconFile is null)
         {
-            Feedback = "請上傳 PNG 或 JPEG 自訂圖示。";
-            return RedirectToPage(new { selected = name, add = isNew });
+            return PointError("請上傳 PNG 或 JPEG 自訂圖示。", 400, name, isNew, "customIcon");
         }
 
         List<string> uploaded = [];
         bool saved = false;
+        string? uploadingField = null;
         try
         {
             string file = selectedFile ?? "";
             FloorImage[] floorImages = playlist.FloorImages ?? [];
             if (image is not null)
             {
+                uploadingField = "image";
                 file = await storage.UploadEngineeringAsync(image, HttpContext.RequestAborted);
                 uploaded.Add(file);
                 floorImages = [.. floorImages, new FloorImage(file, Path.GetFileName(image.FileName))];
             }
             if (icon == "custom" && customIcon is not null)
             {
+                uploadingField = "customIcon";
                 iconFile = await storage.UploadEngineeringAsync(customIcon, HttpContext.RequestAborted);
                 uploaded.Add(iconFile);
             }
@@ -209,11 +239,15 @@ public sealed class PointsModel(
             PointPlan[] plans = playlist.PointPlans ?? [];
             plans = previous is null ? [.. plans, updated] : plans.Select(plan => plan.Point == name ? updated : plan).ToArray();
             saved = storage.Save(playlist with { PointPlans = plans, FloorImages = floorImages });
-            Feedback = saved ? "已儲存測點平面圖及告警圖示。" : "設定已更新，請重新上傳。";
+            if (!saved)
+            {
+                return PointError("設定已在其他地方更新。請先確認最新內容。", 409, name, isNew);
+            }
+            Feedback = "已儲存測點平面圖及告警圖示。";
         }
         catch (InvalidDataException error)
         {
-            Feedback = error.Message;
+            return PointError(error.Message, 400, name, isNew, uploadingField);
         }
         finally
         {
@@ -225,7 +259,18 @@ public sealed class PointsModel(
                 }
             }
         }
-        return RedirectToPage(new { selected = name });
+        return WantsJson()
+            ? new JsonResult(new { redirect = Url.Page("Points", new { selected = name }) })
+            : RedirectToPage(new { selected = name });
+    }
+
+    private bool WantsJson() => Request.Headers.Accept.ToString().Contains("application/json", StringComparison.OrdinalIgnoreCase);
+
+    private IActionResult PointError(string message, int status, string? point, bool isNew, string? field = null)
+    {
+        if (WantsJson()) return new JsonResult(new { message, field }) { StatusCode = status };
+        Feedback = message;
+        return RedirectToPage(new { selected = point, add = isNew });
     }
 
     private static bool IsFloorImage(IFormFile file) =>
