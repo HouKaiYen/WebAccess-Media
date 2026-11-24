@@ -24,7 +24,7 @@ public sealed class AlarmDisplaySteps
     [Then("畫面顯示 (.*) 的平面圖")]
     public void ThenShowsFloorPlan(string point) =>
         Assert.That(AlarmDisplay.SelectRegistered(_alarms, _plans).Alarm?.FloorPlanUrl,
-            Is.EqualTo($"/media/{point.ToLowerInvariant()}.png"));
+            Is.EqualTo($"/engineering-media/{point.ToLowerInvariant()}.png"));
 
     [Then("畫面顯示待機內容")]
     public void ThenShowsIdleContent() => Assert.That(AlarmDisplay.SelectRegistered(_alarms, _plans).Alarm, Is.Null);

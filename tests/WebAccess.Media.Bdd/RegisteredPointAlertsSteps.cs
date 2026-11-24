@@ -29,7 +29,7 @@ public sealed class RegisteredPointAlertsSteps
     public void ThenShowsRegisteredAlarm()
     {
         (Alarm? alarm, PointPlan? marker) = AlarmDisplay.SelectRegistered(_active, _plans);
-        Assert.That(alarm, Is.EqualTo(new Alarm("B", "/media/b.png", "測試告警")));
+        Assert.That(alarm, Is.EqualTo(new Alarm("B", "/engineering-media/b.png", "測試告警")));
         Assert.That(marker, Is.EqualTo(_plans[0]));
     }
 }

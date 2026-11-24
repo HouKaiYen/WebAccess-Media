@@ -3,6 +3,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WebAccess 告警顯示</title>
+<link rel="stylesheet" href="/alarm-icons.css">
 <style>
 body { margin: 0; background: #101923; color: #fff; font: 2rem system-ui, sans-serif; }
 main { padding: 4vw; }
@@ -17,12 +18,15 @@ p { color: #ffc47a; }
 #status { position: relative; }
 #plan-frame { display: inline-block; position: relative; max-width: 100%; }
 #plan { display: block; }
-#marker { position: absolute; width: 1.1rem; height: 1.1rem; border: 2px solid white; background: #e74033; border-radius: 50%; transform: translate(-50%, -50%); }
+#marker { position: absolute; transform: translate(-50%, -50%); }
+body.image-only #plan-frame { position: fixed; inset: 0; background: #000; }
+body.image-only #plan { width: 100%; height: 100%; max-height: none; object-fit: contain; }
+body.image-only #title, body.image-only #status { display: none; }
 @keyframes ticker { to { transform: translateX(-100%); } }
 </style>
 <main>
   <h1 id="title">正在取得顯示狀態</h1>
-  <div id="plan-frame" hidden><img id="plan" alt="測點平面圖"><span id="marker" hidden></span></div>
+  <div id="plan-frame" hidden><img id="plan" alt="測點平面圖"><span class="alarm-icon" id="marker" hidden><img id="marker-image" alt="" hidden></span></div>
   <div id="standby" hidden></div>
   <div id="marquee" hidden><span></span></div>
   <p id="status" role="status"></p>
@@ -32,6 +36,7 @@ const title = document.getElementById('title');
 const plan = document.getElementById('plan');
 const frame = document.getElementById('plan-frame');
 const marker = document.getElementById('marker');
+const markerImage = document.getElementById('marker-image');
 const status = document.getElementById('status');
 const standby = document.getElementById('standby');
 const marquee = document.getElementById('marquee');
@@ -88,12 +93,20 @@ async function refresh() {
     setStandby(alarm ? null : state.playlist);
     title.textContent = alarm ? '告警　' + alarm.point + (alarm.description ? '　' + alarm.description : '') : '待機中';
     const url = alarm && alarm.floorPlanUrl;
+    const appearance = state.marker;
+    const imageOnly = !!(url && appearance && appearance.imageOnly);
+    document.body.classList.toggle('image-only', imageOnly);
     frame.hidden = !url;
     if (url && plan.getAttribute('src') !== url) plan.src = url;
-    marker.hidden = !url || !state.marker;
+    marker.hidden = !url || !appearance || imageOnly;
     if (!marker.hidden) {
-      marker.style.left = state.marker.x + '%';
-      marker.style.top = state.marker.y + '%';
+      marker.style.left = appearance.x + '%';
+      marker.style.top = appearance.y + '%';
+      marker.dataset.icon = appearance.icon || 'dot';
+      marker.dataset.flash = appearance.flash;
+      const iconUrl = appearance.icon === 'custom' && appearance.iconUrl;
+      markerImage.hidden = !iconUrl;
+      if (iconUrl && markerImage.getAttribute('src') !== iconUrl) markerImage.src = iconUrl;
     }
     const lastSuccess = state.lastSuccessAt ? '，最後更新 ' + new Date(state.lastSuccessAt).toLocaleString('zh-TW') : '';
     const messages = { disconnected: 'WebAccess 連線異常' + lastSuccess, connecting: '正在連線至 WebAccess', unconfigured: '尚未設定 WebAccess' };
