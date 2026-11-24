@@ -1,0 +1,22 @@
+name: Windows CI
+on:
+  push:
+    branches: [develop, master, 'feature/**', 'release/**', 'hotfix/**']
+  pull_request:
+    branches: [develop, master]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet test --configuration Release
+      - run: dotnet publish src/WebAccess.Media -c Release -r win-x64 --self-contained -o artifacts/win-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WebAccess-Media-win-x64
+          path: artifacts/win-x64
