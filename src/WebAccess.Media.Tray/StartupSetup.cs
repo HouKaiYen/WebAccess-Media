@@ -13,7 +13,7 @@ internal static class StartupSetup
     private const uint KeepUsername = 0x100000;
     private const int Cancelled = 1223;
 
-    public static void Configure(string[] args)
+    public static int Configure(string[] args)
     {
         try
         {
@@ -21,7 +21,7 @@ internal static class StartupSetup
                 !Uri.TryCreate(args[3], UriKind.Absolute, out Uri? address) || !address.IsLoopback ||
                 address.Scheme is not ("http" or "https"))
             {
-                return;
+                return WindowsStartupTasks.SetupFailed;
             }
             SecurityIdentifier sid = new(args[4]);
             string account = sid.Translate(typeof(NTAccount)).Value;
@@ -29,8 +29,7 @@ internal static class StartupSetup
             string executable = Path.Combine(directory, "WebAccess.Media.exe");
             if (!File.Exists(executable))
             {
-                Show("找不到同一套件的 WebAccess.Media.exe。請完整解壓縮 Windows ZIP。", MessageBoxIcon.Warning);
-                return;
+                return WindowsStartupTasks.SetupFailed;
             }
             WindowsStartupTasks tasks = new(executable, args[1], args[2], address, sid.Value);
             StringBuilder user = new(account, 514);
@@ -46,10 +45,10 @@ internal static class StartupSetup
             {
                 int result = Prompt(ref dialog, "WebAccess Media", IntPtr.Zero, 0, user, user.Capacity,
                     password, password.Capacity, ref save, DoNotPersist | AlwaysShowUi | GenericCredentials | KeepUsername);
-                if (result == Cancelled) return;
+                if (result == Cancelled) return WindowsStartupTasks.SetupCancelled;
                 if (result != 0) throw new Win32Exception(result);
                 tasks.Register(account, password.ToString());
-                Show("已建立開機監控與登入通知區排程。請重新整理工程設定頁查看狀態。", MessageBoxIcon.Information);
+                return WindowsStartupTasks.SetupSucceeded;
             }
             finally
             {
@@ -60,12 +59,9 @@ internal static class StartupSetup
         catch (Exception error) when (error is COMException or UnauthorizedAccessException or Win32Exception or ArgumentException
             or IdentityNotMappedException)
         {
-            Show($"無法建立開機排程（0x{error.HResult:X8}）。請確認 Windows 帳號密碼及批次登入權限。", MessageBoxIcon.Warning);
+            return WindowsStartupTasks.SetupFailed;
         }
     }
-
-    private static void Show(string message, MessageBoxIcon icon) =>
-        MessageBox.Show(message, "WebAccess Media", MessageBoxButtons.OK, icon);
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct CredentialDialog

@@ -38,7 +38,7 @@ public sealed class StartupModel(IServer server, IConfiguration configuration, I
         }
     }
 
-    public IActionResult OnPostSave(bool enabled)
+    public async Task<IActionResult> OnPostSaveAsync(bool enabled)
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -63,7 +63,16 @@ public sealed class StartupModel(IServer server, IConfiguration configuration, I
             else
             {
                 using Process? setup = Process.Start(tasks.CreateSetupProcess());
-                Feedback = "請在 Windows 桌面完成管理員授權與帳號驗證，完成後重新整理本頁。";
+                if (setup is not null)
+                {
+                    await setup.WaitForExitAsync(HttpContext.RequestAborted);
+                }
+                Feedback = setup?.ExitCode switch
+                {
+                    WindowsStartupTasks.SetupSucceeded => "已開啟開機自動啟動。",
+                    WindowsStartupTasks.SetupCancelled => "已取消 Windows 帳號驗證。",
+                    _ => "無法建立開機排程。請確認 Windows 登入密碼與帳號的批次登入權限後再試。"
+                };
             }
         }
         catch (Win32Exception error) when (error.NativeErrorCode == 1223)

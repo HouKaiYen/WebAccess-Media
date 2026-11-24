@@ -49,7 +49,7 @@
         main { max-width: 1100px; margin: auto; padding: 1.25rem; }
 </style>
 }
-@section Actions { <button type="submit" form="playlist-form" class="primary">儲存設定</button> }
+@section Actions { <button id="save-playlist" type="submit" form="playlist-form" class="primary">儲存設定</button> }
 <main id="main-content" tabindex="-1">
     <div class="intro toolbar">
         <div><h1>管理待機播放內容</h1><p>新增圖片或影片，設定播放順序與圖片停留時間。</p></div>
@@ -65,43 +65,17 @@
         <input type="hidden" asp-for="Revision">
         <section class="card">
             <div class="section-heading toolbar">
-                <div><h2>播放清單 <span class="count">@Model.Items.Count</span></h2><p>圖片依序循環播放，影片播完後切換。</p></div>
+                <div><h2>播放清單 <span class="count" id="playlist-count">@Model.Items.Count</span></h2><p>圖片依序循環播放，影片播完後切換。</p></div>
                 <input form="upload-form" id="upload-media" type="file" name="media" aria-label="新增媒體檔案" accept=".png,.jpg,.jpeg,.gif,.mp4" hidden>
                 <button type="button" id="choose-media">＋ 新增媒體</button>
             </div>
             <p class="file-note">支援 PNG、JPEG、GIF、MP4。圖片與 GIF 上限 20 MB，MP4 上限 100 MB。移除項目並儲存後，會刪除未被使用的本機副本。</p>
-            @if (Model.Items.Count == 0)
-            {
-                <div class="empty"><strong>播放清單目前是空的</strong><span>新增媒體後，待機畫面會依序循環播放。</span></div>
-            }
+            <p class="feedback" id="upload-status" role="status" hidden></p>
+            <div id="playlist-empty" class="empty" hidden="@(Model.Items.Count > 0)"><strong>播放清單目前是空的</strong><span>新增媒體後，待機畫面會依序循環播放。</span></div>
             <div id="playlist">
                 @for (int index = 0; index < Model.Items.Count; index++)
                 {
-                    string file = Model.Items[index].File;
-                    <div class="row" data-file="@file">
-                        <input type="hidden" name="Items.Index" value="@index">
-                        <input type="hidden" asp-for="Items[index].File">
-                        @if (file.EndsWith(".mp4", StringComparison.Ordinal))
-                        {
-                            <span class="thumb">MP4</span>
-                        }
-                        else
-                        {
-                            <img class="thumb" src="/media/@file" alt="" width="76" height="48" loading="lazy">
-                        }
-                        <label>名稱 <input asp-for="Items[index].Name" maxlength="200" required></label>
-                        @if (file.EndsWith(".mp4", StringComparison.Ordinal))
-                        {
-                            <span class="muted">播完後切換</span><input asp-for="Items[index].Seconds" type="hidden">
-                        }
-                        else
-                        {
-                            <label>停留秒數 <input asp-for="Items[index].Seconds" type="number" min="3" max="300" required></label>
-                        }
-                        <button type="button" data-move="up" aria-label="上移">↑</button>
-                        <button type="button" data-move="down" aria-label="下移">↓</button>
-                        <button type="button" data-remove>移除</button>
-                    </div>
+                    @await Html.PartialAsync("_PlaylistItemRow", (index, Model.Items[index]))
                 }
             </div>
         </section>
@@ -123,9 +97,50 @@ const playlistForm = document.getElementById('playlist-form');
 const list = document.getElementById('playlist');
 let dirty = false;
 const upload = document.getElementById('upload-media');
-document.getElementById('choose-media').addEventListener('click', () => upload.click());
-upload.addEventListener('change', () => {
-    if (upload.files.length) document.getElementById('upload-form').requestSubmit();
+const chooseMedia = document.getElementById('choose-media');
+const savePlaylist = document.getElementById('save-playlist');
+const uploadForm = document.getElementById('upload-form');
+const uploadStatus = document.getElementById('upload-status');
+const playlistRevision = document.getElementById('Revision');
+let uploading = false;
+function updatePlaylistCount() {
+    const count = list.querySelectorAll('.row:not([hidden])').length;
+    document.getElementById('playlist-count').textContent = count;
+    document.getElementById('playlist-empty').hidden = count > 0;
+}
+chooseMedia.addEventListener('click', () => upload.click());
+upload.addEventListener('change', async () => {
+    if (!upload.files.length || uploading) return;
+    const body = new FormData(uploadForm);
+    body.set('revision', playlistRevision.value);
+    uploading = true;
+    chooseMedia.disabled = true;
+    savePlaylist.disabled = true;
+    uploadStatus.hidden = false;
+    uploadStatus.textContent = '正在上傳媒體…';
+    try {
+        const response = await fetch(uploadForm.action, { method: 'POST', headers: { 'X-Playlist-Upload': 'row' }, body });
+        if (!response.ok) {
+            const error = await response.json();
+            uploadStatus.textContent = error.message;
+            return;
+        }
+        const revision = response.headers.get('X-Playlist-Revision');
+        const documentFragment = new DOMParser().parseFromString(await response.text(), 'text/html');
+        const row = documentFragment.querySelector('.row');
+        if (!row || !revision) throw new Error();
+        list.append(row);
+        playlistRevision.value = revision;
+        updatePlaylistCount();
+        uploadStatus.textContent = '已加入播放清單。';
+    } catch {
+        uploadStatus.textContent = '無法完成上傳。請確認連線及檔案大小後重試。';
+    } finally {
+        uploading = false;
+        chooseMedia.disabled = false;
+        savePlaylist.disabled = false;
+        upload.value = '';
+    }
 });
 function markDirty() {
     dirty = true;
@@ -133,6 +148,10 @@ function markDirty() {
 }
 playlistForm.addEventListener('input', markDirty);
 playlistForm.addEventListener('submit', event => {
+    if (uploading) {
+        event.preventDefault();
+        return;
+    }
     const removedCount = playlistForm.querySelectorAll('input[name=remove]').length;
     if (removedCount && !window.confirm('確定要儲存並移除 ' + removedCount + ' 項媒體？未被引用的本機副本也會刪除。')) {
         event.preventDefault();
@@ -155,6 +174,7 @@ list.addEventListener('click', function (event) {
         removed.value = row.dataset.file;
         playlistForm.append(removed);
         row.hidden = true;
+        updatePlaylistCount();
         markDirty();
         return;
     }

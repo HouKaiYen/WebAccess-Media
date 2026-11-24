@@ -11,6 +11,9 @@ namespace WebAccess.Media;
 [SupportedOSPlatform("windows")]
 internal sealed class WindowsStartupTasks(string executable, string storage, string urls, Uri localAddress, string userSid)
 {
+    public const int SetupSucceeded = 0;
+    public const int SetupFailed = 1;
+    public const int SetupCancelled = 2;
     private const int TaskCreateOrUpdate = 6;
     private const int TaskLogonPassword = 1;
     private const int TaskLogonInteractiveToken = 3;

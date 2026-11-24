@@ -4,7 +4,7 @@
 @{ Layout = "_ManagementLayout"; ViewData["Title"] = "開機自動啟動"; }
 
 @section Actions {
-    <button type="submit" form="startup-form" class="primary" disabled="@(!Model.IsAvailable)">儲存設定</button>
+    <button id="save-startup" type="submit" form="startup-form" class="primary" disabled="@(!Model.IsAvailable)">儲存設定</button>
 }
 
 @section Styles {
@@ -23,6 +23,7 @@
     {
         <p class="feedback" role="status">@feedback</p>
     }
+    <p class="feedback" id="startup-progress" role="status" hidden></p>
     @if (Model.IsAvailable)
     {
         <form class="startup-card card" id="startup-form" method="post" asp-page-handler="Save">
@@ -41,3 +42,16 @@
         <p>開機設定需要可連到本機管理頁的完整 Windows 可攜套件及工作排程器。</p>
     }
 </main>
+<script>
+document.getElementById('startup-form')?.addEventListener('submit', event => {
+    if (event.currentTarget.getAttribute('aria-busy') === 'true') {
+        event.preventDefault();
+        return;
+    }
+    event.currentTarget.setAttribute('aria-busy', 'true');
+    document.getElementById('save-startup').disabled = true;
+    const progress = document.getElementById('startup-progress');
+    progress.hidden = false;
+    progress.textContent = '正在儲存設定…若 Windows 顯示授權或帳號驗證視窗，請完成操作。';
+});
+</script>
