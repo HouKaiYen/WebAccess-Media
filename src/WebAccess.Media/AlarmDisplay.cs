@@ -12,7 +12,7 @@ public static class AlarmDisplay
             PointPlan? plan = plans.FirstOrDefault(plan => plan.Point == alarm.Point);
             if (plan is not null)
             {
-                return (alarm with { FloorPlanUrl = $"/media/{plan.File}" }, plan);
+                return (alarm with { FloorPlanUrl = $"/engineering-media/{plan.File}" }, plan);
             }
         }
         return (null, null);

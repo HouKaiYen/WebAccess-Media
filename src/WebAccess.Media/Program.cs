@@ -65,7 +65,11 @@ app.MapGet("/api/display", (WebAccessAlarmMonitor monitor, PlayerSettings player
     (Alarm? alarm, PointPlan? marker) = AlarmDisplay.SelectRegistered(state.Alarms, playlist.PointPlans ?? []);
     return Results.Ok(new
     {
-        Alarm = alarm, Marker = marker is null ? null : new { marker.X, marker.Y },
+        Alarm = alarm, Marker = marker is null ? null : new
+        {
+            marker.X, marker.Y, marker.Icon, marker.Flash, marker.ImageOnly,
+            IconUrl = marker.IconFile is string file ? $"/engineering-media/{file}" : null
+        },
         state.ConnectionStatus, state.LastSuccessAt,
         Playlist = new { playlist.Revision, playlist.Items, playlist.IsMuted, playlist.Marquee, playlist.MarqueeAtTop }
     });
@@ -75,6 +79,13 @@ app.MapGet("/media/{file}", (string file, PlayerSettings player, HttpContext con
     context.Response.Headers.XContentTypeOptions = "nosniff";
     return player.FindMedia(file) is string path
         ? Results.File(path, PlayerSettings.MimeType(Path.GetExtension(file)), enableRangeProcessing: true)
+        : Results.NotFound();
+});
+app.MapGet("/engineering-media/{file}", (string file, PlayerSettings player, HttpContext context) =>
+{
+    context.Response.Headers.XContentTypeOptions = "nosniff";
+    return player.FindEngineeringMedia(file) is string path
+        ? Results.File(path, PlayerSettings.MimeType(Path.GetExtension(file)))
         : Results.NotFound();
 });
 app.Run();

@@ -6,6 +6,8 @@ namespace WebAccess.Media.Pages;
 [RequestSizeLimit(102 * 1024 * 1024)]
 public sealed class PointsModel(PlayerSettings storage, EngineeringSettings connection, WebAccessClient client) : PageModel
 {
+    public static IReadOnlyList<(string Value, string Label)> AlarmIcons { get; } =
+        [("sos", "SOS 圓牌"), ("triangle", "警告三角"), ("dot", "色彩圓點"), ("button", "緊急押鈕"), ("custom", "自訂圖示")];
     public PointPlan[] Plans { get; private set; } = [];
     public PointPlan? Selected { get; private set; }
     public FloorImage[] FloorImages { get; private set; } = [];
@@ -33,7 +35,7 @@ public sealed class PointsModel(PlayerSettings storage, EngineeringSettings conn
     {
         Playlist playlist = storage.Read();
         Plans = playlist.PointPlans ?? [];
-        FloorImages = playlist.FloorImages ?? [];
+        FloorImages = GetFloorImages(playlist);
         Revision = playlist.Revision;
         Selected = add ? null : Plans.FirstOrDefault(plan => plan.Point == selected) ?? Plans.FirstOrDefault();
     }
@@ -53,7 +55,7 @@ public sealed class PointsModel(PlayerSettings storage, EngineeringSettings conn
         {
             foreach (IFormFile image in images)
             {
-                string file = await storage.UploadAsync(image, HttpContext.RequestAborted);
+                string file = await storage.UploadEngineeringAsync(image, HttpContext.RequestAborted);
                 uploaded.Add(new FloorImage(file, Path.GetFileName(image.FileName)));
             }
             saved = storage.Save(playlist with { FloorImages = [.. (playlist.FloorImages ?? []), .. uploaded] });
@@ -69,7 +71,7 @@ public sealed class PointsModel(PlayerSettings storage, EngineeringSettings conn
             {
                 foreach (FloorImage image in uploaded)
                 {
-                    storage.RemoveMedia(image.File);
+                    storage.RemoveEngineeringMedia(image.File);
                 }
             }
         }
@@ -77,13 +79,15 @@ public sealed class PointsModel(PlayerSettings storage, EngineeringSettings conn
     }
 
     public async Task<IActionResult> OnPostSaveAsync(
-        string? point, int x, int y, IFormFile? image, string? sharedFile, int revision, bool isNew)
+        string? point, int x, int y, IFormFile? image, string? sharedFile, int revision, bool isNew,
+        string icon = "dot", bool flash = false, bool imageOnly = false, IFormFile? customIcon = null)
     {
         if (!ModelState.IsValid || string.IsNullOrWhiteSpace(point) || point.Length > 256 ||
             x is < 0 or > 100 || y is < 0 or > 100 ||
-            (image is not null && !IsFloorImage(image)))
+            !AlarmIcons.Any(option => option.Value == icon) ||
+            (image is not null && !IsFloorImage(image)) || (customIcon is not null && !IsFloorImage(customIcon)))
         {
-            Feedback = "請輸入測點 Name、0–100 的座標並選取 PNG 或 JPEG。";
+            Feedback = "請確認測點、座標與圖示設定，圖片限 PNG 或 JPEG。";
             return RedirectToPage();
         }
 
@@ -96,41 +100,66 @@ public sealed class PointsModel(PlayerSettings storage, EngineeringSettings conn
             return RedirectToPage(new { selected = name, add = isNew });
         }
 
-        FloorImage? shared = playlist.FloorImages?.FirstOrDefault(item => item.File == sharedFile);
+        FloorImage? shared = GetFloorImages(playlist).FirstOrDefault(item => item.File == sharedFile);
         string? selectedFile = shared?.File ?? previous?.File;
         if (image is null && selectedFile is null)
         {
             Feedback = "新增測點時請選取共用平面圖或上傳一張圖片。";
             return RedirectToPage(new { add = true });
         }
+        string? iconFile = previous?.IconFile;
+        if (icon == "custom" && customIcon is null && iconFile is null)
+        {
+            Feedback = "請上傳 PNG 或 JPEG 自訂圖示。";
+            return RedirectToPage(new { selected = name, add = isNew });
+        }
+
+        List<string> uploaded = [];
+        bool saved = false;
         try
         {
-            string file = image is null ? selectedFile! : await storage.UploadAsync(image, HttpContext.RequestAborted);
-            PointPlan updated = new(name, file, x, y);
+            string file = selectedFile ?? "";
+            FloorImage[] floorImages = playlist.FloorImages ?? [];
+            if (image is not null)
+            {
+                file = await storage.UploadEngineeringAsync(image, HttpContext.RequestAborted);
+                uploaded.Add(file);
+                floorImages = [.. floorImages, new FloorImage(file, Path.GetFileName(image.FileName))];
+            }
+            if (icon == "custom" && customIcon is not null)
+            {
+                iconFile = await storage.UploadEngineeringAsync(customIcon, HttpContext.RequestAborted);
+                uploaded.Add(iconFile);
+            }
+            PointPlan updated = new(name, file, x, y, icon, flash, imageOnly, iconFile);
             PointPlan[] plans = playlist.PointPlans ?? [];
             plans = previous is null ? [.. plans, updated] : plans.Select(plan => plan.Point == name ? updated : plan).ToArray();
-            if (storage.Save(playlist with { PointPlans = plans }))
-            {
-                Feedback = "已儲存測點平面圖。";
-            }
-            else
-            {
-                if (image is not null)
-                {
-                    storage.RemoveMedia(file);
-                }
-                Feedback = "設定已更新，請重新上傳。";
-            }
+            saved = storage.Save(playlist with { PointPlans = plans, FloorImages = floorImages });
+            Feedback = saved ? "已儲存測點平面圖及告警圖示。" : "設定已更新，請重新上傳。";
         }
         catch (InvalidDataException error)
         {
             Feedback = error.Message;
+        }
+        finally
+        {
+            if (!saved)
+            {
+                foreach (string file in uploaded)
+                {
+                    storage.RemoveEngineeringMedia(file);
+                }
+            }
         }
         return RedirectToPage(new { selected = name });
     }
 
     private static bool IsFloorImage(IFormFile file) =>
         Path.GetExtension(file.FileName).ToLowerInvariant() is ".png" or ".jpg" or ".jpeg";
+
+    private static FloorImage[] GetFloorImages(Playlist playlist) =>
+        (playlist.FloorImages ?? []).Concat((playlist.PointPlans ?? []).Select(plan => new FloorImage(plan.File, plan.Point)))
+            .DistinctBy(image => image.File).ToArray();
 
     public IActionResult OnPostRemove(string point)
     {

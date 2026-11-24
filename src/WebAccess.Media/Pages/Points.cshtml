@@ -4,6 +4,7 @@
 @{ Layout = "_ManagementLayout"; ViewData["Title"] = "工程設定"; }
 
 @section Styles {
+<link rel="stylesheet" href="/alarm-icons.css">
 <style>
     .workspace { display: grid; grid-template-columns: minmax(190px, 250px) minmax(0, 1fr); min-height: calc(100vh - 68px); }
     aside { padding: 1rem; background: #14202b; border-right: 1px solid #304352; }
@@ -17,7 +18,15 @@
     .canvas { min-height: 350px; background: #080e14; border: 1px solid #304352; border-radius: .6rem; display: grid; place-items: center; padding: 1.15rem; text-align: center; }
     .plan { position: relative; display: inline-block; max-width: 100%; cursor: crosshair; }
     .plan img { max-width: 100%; max-height: 66vh; display: block; }
-    .marker { position: absolute; width: 1.2rem; height: 1.2rem; border: 2px solid white; background: #e74033; border-radius: 50%; transform: translate(-50%, -50%); cursor: grab; touch-action: none; }
+    .marker { position: absolute; transform: translate(-50%, -50%); cursor: grab; touch-action: none; }
+    .floor-grid, .icon-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; margin-bottom: .75rem; }
+    .floor-card { display: grid; gap: .35rem; padding: .35rem; overflow: hidden; }
+    .floor-card img { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: #080e14; }
+    .floor-card span { text-overflow: ellipsis; overflow: hidden; white-space: nowrap; font-size: .8rem; }
+    .icon-option { display: flex; align-items: center; gap: .4rem; margin: 0; padding: .35rem; border: 1px solid var(--border); border-radius: .4rem; font-size: .85rem; }
+    .icon-option:has(:checked) { border-color: var(--accent); }
+    .check { display: flex; align-items: center; }
+    .icon-option input, .check input { width: auto; margin: 0; }
     [hidden] { display: none !important; }
     .inspector { padding: 1rem; border: 1px solid #304352; border-radius: .6rem; background: #172634; }
     .inspector h2 { font-size: 1.1rem; }
@@ -54,6 +63,14 @@
             <button type="submit">加入共用圖庫</button>
         </form>
         <p class="muted">@Model.FloorImages.Length 張圖可供測點選用</p>
+        <div class="floor-grid">
+            @foreach (WebAccess.Media.FloorImage floor in Model.FloorImages)
+            {
+                <button class="floor-card" type="button" data-floor="@floor.File" title="@floor.Name">
+                    <img src="/engineering-media/@floor.File" alt="" loading="lazy"><span>@floor.Name</span>
+                </button>
+            }
+        </div>
     </aside>
     <main>
         <h1>@(Model.Selected?.Point ?? "新增測點頁面")</h1>
@@ -67,13 +84,15 @@
                 <div class="plan" id="plan" hidden="@(Model.Selected is null)">
                     @if (Model.Selected is WebAccess.Media.PointPlan selected)
                     {
-                        <img id="image" src="/media/@selected.File" alt="測點平面圖">
+                        <img id="image" src="/engineering-media/@selected.File" alt="測點平面圖">
                     }
                     else
                     {
                         <img id="image" alt="測點平面圖預覽">
                     }
-                    <span class="marker" id="marker" style="left:@(Model.Selected?.X ?? 50)%;top:@(Model.Selected?.Y ?? 50)%"></span>
+                    <span class="marker alarm-icon" id="marker" data-icon="@(Model.Selected?.Icon ?? "dot")" style="left:@(Model.Selected?.X ?? 50)%;top:@(Model.Selected?.Y ?? 50)%">
+                        <img id="marker-image" alt="" hidden>
+                    </span>
                 </div>
             </div>
             <div class="inspector">
@@ -97,11 +116,32 @@
                             }
                         </select>
                     </label>
-                    <label>或上傳獨立平面圖 <input name="image" id="file" type="file" accept=".png,.jpg,.jpeg"></label>
+                    <label>或上傳新底圖 <input name="image" id="file" type="file" accept=".png,.jpg,.jpeg"></label>
                     <div class="coordinates">
                         <label>水平位置 % <input id="x" name="x" type="number" min="0" max="100" value="@(Model.Selected?.X ?? 50)" required></label>
                         <label>垂直位置 % <input id="y" name="y" type="number" min="0" max="100" value="@(Model.Selected?.Y ?? 50)" required></label>
                     </div>
+                    <fieldset>
+                        <legend>圖示樣式</legend>
+                        <div class="icon-grid">
+                            @foreach ((string value, string label) in WebAccess.Media.Pages.PointsModel.AlarmIcons)
+                            {
+                                <label class="icon-option">
+                                    <input type="radio" name="icon" value="@value" checked="@((Model.Selected?.Icon ?? "dot") == value)">
+                                    @if (value != "custom")
+                                    {
+                                        <span class="alarm-icon" data-icon="@value" aria-hidden="true"></span>
+                                    }
+                                    @label
+                                </label>
+                            }
+                        </div>
+                        <label id="custom-icon-field" hidden="@(Model.Selected?.Icon != "custom")">上傳 PNG / JPEG 圖示
+                            <input name="customIcon" id="custom-icon" type="file" accept=".png,.jpg,.jpeg" data-existing="@Model.Selected?.IconFile">
+                        </label>
+                        <label class="check"><input type="checkbox" name="flash" id="flash" value="true" checked="@(Model.Selected?.Flash ?? true)">閃爍警報圖示</label>
+                        <label class="check"><input type="checkbox" name="imageOnly" id="image-only" value="true" checked="@(Model.Selected?.ImageOnly ?? false)">全頁只顯示圖片</label>
+                    </fieldset>
                     <button class="primary" type="submit">儲存設定</button>
                 </form>
                 @if (Model.Selected is WebAccess.Media.PointPlan current)
@@ -116,9 +156,35 @@
 const image = document.getElementById('image');
 const plan = document.getElementById('plan');
 const marker = document.getElementById('marker');
+const markerImage = document.getElementById('marker-image');
+const customIcon = document.getElementById('custom-icon');
+const imageOnly = document.getElementById('image-only');
 const x = document.getElementById('x');
 const y = document.getElementById('y');
 let temporaryImage = null;
+let temporaryIcon = null;
+function updateIcon() {
+    const icon = document.querySelector('input[name=icon]:checked').value;
+    const isCustom = icon === 'custom';
+    marker.dataset.icon = icon;
+    marker.dataset.flash = document.getElementById('flash').checked;
+    marker.hidden = imageOnly.checked;
+    document.getElementById('custom-icon-field').hidden = !isCustom;
+    customIcon.disabled = !isCustom;
+    customIcon.required = isCustom && !customIcon.dataset.existing;
+    const source = temporaryIcon || (customIcon.dataset.existing ? '/engineering-media/' + customIcon.dataset.existing : '');
+    markerImage.hidden = !isCustom || !source;
+    if (source && markerImage.getAttribute('src') !== source) markerImage.src = source;
+}
+for (const field of document.querySelectorAll('input[name=icon], #flash, #image-only')) {
+    field.addEventListener('change', updateIcon);
+}
+customIcon.addEventListener('change', () => {
+    if (temporaryIcon) URL.revokeObjectURL(temporaryIcon);
+    temporaryIcon = customIcon.files[0] ? URL.createObjectURL(customIcon.files[0]) : null;
+    updateIcon();
+});
+updateIcon();
 function updateMarker() {
     marker.style.left = x.value + '%';
     marker.style.top = y.value + '%';
@@ -168,7 +234,7 @@ function updatePlan() {
     const file = fileInput.files[0];
     if (temporaryImage) URL.revokeObjectURL(temporaryImage);
     temporaryImage = file ? URL.createObjectURL(file) : null;
-    const source = temporaryImage || (sharedFile.value ? '/media/' + encodeURIComponent(sharedFile.value) : originalImage);
+    const source = temporaryImage || (sharedFile.value ? '/engineering-media/' + encodeURIComponent(sharedFile.value) : originalImage);
     if (source) image.src = source;
     else image.removeAttribute('src');
     plan.hidden = !source;
@@ -179,4 +245,11 @@ sharedFile.addEventListener('change', () => {
     fileInput.value = '';
     updatePlan();
 });
+for (const card of document.querySelectorAll('[data-floor]')) {
+    card.addEventListener('click', () => {
+        sharedFile.value = card.dataset.floor;
+        fileInput.value = '';
+        updatePlan();
+    });
+}
 </script>

@@ -7,7 +7,8 @@ public sealed record PlaylistItem(string File, string Name, int Seconds)
     public bool IsVideo => File.EndsWith(".mp4", StringComparison.Ordinal);
 }
 
-public sealed record PointPlan(string Point, string File, int X, int Y);
+public sealed record PointPlan(string Point, string File, int X, int Y,
+    string Icon = "dot", bool Flash = true, bool ImageOnly = false, string? IconFile = null);
 public sealed record FloorImage(string File, string Name);
 
 public sealed record Playlist(int Revision, PlaylistItem[] Items, bool IsMuted, string Marquee, bool MarqueeAtTop,
@@ -17,6 +18,7 @@ public sealed class PlayerSettings(string directory)
 {
     private readonly string _path = Path.Combine(directory, "playlist.json");
     private readonly string _mediaDirectory = Path.Combine(directory, "media");
+    private readonly string _engineeringDirectory = Path.Combine(directory, "engineering-media");
     private readonly object _gate = new();
 
     public Playlist Read()
@@ -54,7 +56,13 @@ public sealed class PlayerSettings(string directory)
         }
     }
 
-    public async Task<string> UploadAsync(IFormFile upload, CancellationToken cancellationToken)
+    public Task<string> UploadAsync(IFormFile upload, CancellationToken cancellationToken) =>
+        UploadAsync(upload, _mediaDirectory, cancellationToken);
+
+    public Task<string> UploadEngineeringAsync(IFormFile upload, CancellationToken cancellationToken) =>
+        UploadAsync(upload, _engineeringDirectory, cancellationToken);
+
+    private static async Task<string> UploadAsync(IFormFile upload, string targetDirectory, CancellationToken cancellationToken)
     {
         string extension = Path.GetExtension(upload.FileName).ToLowerInvariant();
         long limit = (extension == ".mp4" ? 100L : 20L) * 1024 * 1024;
@@ -79,9 +87,9 @@ public sealed class PlayerSettings(string directory)
             throw new InvalidDataException("檔案內容與選取的媒體格式不符。");
         }
 
-        Directory.CreateDirectory(_mediaDirectory);
+        Directory.CreateDirectory(targetDirectory);
         string file = $"{Guid.NewGuid():N}{extension}";
-        string path = Path.Combine(_mediaDirectory, file);
+        string path = Path.Combine(targetDirectory, file);
         try
         {
             await using FileStream output = File.Open(path, FileMode.CreateNew, FileAccess.Write);
@@ -98,19 +106,42 @@ public sealed class PlayerSettings(string directory)
 
     public string? FindMedia(string file)
     {
+        Playlist playlist = Read();
+        return IsEngineeringReference(playlist, file) && !playlist.Items.Any(item => item.File == file)
+            ? null : FindMedia(_mediaDirectory, file);
+    }
+
+    public string? FindEngineeringMedia(string file) =>
+        FindMedia(_engineeringDirectory, file) ??
+        (IsEngineeringReference(Read(), file) ? FindMedia(_mediaDirectory, file) : null);
+
+    private static bool IsEngineeringReference(Playlist playlist, string file) =>
+        (playlist.FloorImages?.Any(image => image.File == file) ?? false) ||
+        (playlist.PointPlans?.Any(plan => plan.File == file || plan.IconFile == file) ?? false);
+
+    private static string? FindMedia(string targetDirectory, string file)
+    {
         if (!Guid.TryParseExact(Path.GetFileNameWithoutExtension(file), "N", out _) ||
             MimeType(Path.GetExtension(file)) is null || Path.GetFileName(file) != file)
         {
             return null;
         }
 
-        string path = Path.Combine(_mediaDirectory, file);
+        string path = Path.Combine(targetDirectory, file);
         return File.Exists(path) ? path : null;
     }
 
     public void RemoveMedia(string file)
     {
-        if (FindMedia(file) is string path)
+        if (FindMedia(_mediaDirectory, file) is string path)
+        {
+            File.Delete(path);
+        }
+    }
+
+    public void RemoveEngineeringMedia(string file)
+    {
+        if (FindMedia(_engineeringDirectory, file) is string path)
         {
             File.Delete(path);
         }
