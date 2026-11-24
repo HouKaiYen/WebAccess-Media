@@ -8,7 +8,23 @@
 <style>
 body { margin: 0; background: #101923; color: #fff; font: 2rem var(--app-font); }
 main { padding: 4vw; }
-body.alarm-active main { text-align: center; }
+body.alarm-active { overflow: hidden; }
+body.alarm-active main {
+  box-sizing: border-box;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(8px, 2vh, 22px);
+  padding: clamp(12px, 2.5vmin, 32px);
+  text-align: center;
+}
+body.alarm-active #title { width: 100%; margin: 0; flex: none; line-height: 1.2; white-space: nowrap; }
+body.alarm-active #status { margin: 0; flex: none; font-size: clamp(.75rem, 2.5vmin, 1.25rem); }
+body.alarm-active #status:empty { display: none; }
+body.alarm-active #plan-frame { flex: none; }
 img { max-width: 100%; max-height: 75vh; object-fit: contain; }
 p { color: #ffc47a; }
 #title { overflow-wrap: anywhere; white-space: pre-wrap; }
@@ -21,6 +37,7 @@ p { color: #ffc47a; }
 #status { position: relative; }
 #plan-frame { display: inline-block; position: relative; max-width: 100%; }
 #plan { display: block; }
+body.alarm-active #plan { max-height: none; }
 #marker { position: absolute; transform: translate(-50%, -50%); }
 body.image-only #plan-frame { position: fixed; inset: 0; background: #000; }
 body.image-only #plan { width: 100%; height: 100%; max-height: none; object-fit: contain; }
@@ -36,6 +53,7 @@ body.image-only #title, body.image-only #status { display: none; }
 </main>
 <script>
 const title = document.getElementById('title');
+const main = document.querySelector('main');
 const plan = document.getElementById('plan');
 const frame = document.getElementById('plan-frame');
 const marker = document.getElementById('marker');
@@ -47,6 +65,48 @@ const preview = new URLSearchParams(location.search).get('preview') === 'idle';
 let revision = null;
 let playlist = null;
 let timer = null;
+let alarmTextSize = 48;
+let fitRequest = 0;
+function scheduleAlarmFit() {
+  if (fitRequest) return;
+  fitRequest = requestAnimationFrame(() => {
+    fitRequest = 0;
+    if (!document.body.classList.contains('alarm-active') || document.body.classList.contains('image-only')) {
+      title.style.fontSize = '';
+      plan.style.width = '';
+      plan.style.height = '';
+      return;
+    }
+    const layout = getComputedStyle(main);
+    const availableWidth = main.clientWidth - parseFloat(layout.paddingLeft) - parseFloat(layout.paddingRight);
+    const availableHeight = main.clientHeight - parseFloat(layout.paddingTop) - parseFloat(layout.paddingBottom);
+    const gap = parseFloat(layout.rowGap);
+    const statusHeight = status.offsetHeight;
+    const maxTitleHeight = Math.max(1, (availableHeight - statusHeight) / 3);
+    function fits(size) {
+      title.style.fontSize = size + 'px';
+      return title.scrollWidth <= title.clientWidth && title.offsetHeight <= maxTitleHeight;
+    }
+    if (!fits(alarmTextSize)) {
+      let lower = .1;
+      let upper = alarmTextSize;
+      for (let step = 0; step < 12; step++) {
+        const candidate = (lower + upper) / 2;
+        if (fits(candidate)) lower = candidate;
+        else upper = candidate;
+      }
+      title.style.fontSize = lower + 'px';
+    }
+    if (frame.hidden || !plan.naturalWidth || !plan.naturalHeight) return;
+    const imageHeight = availableHeight - title.offsetHeight - statusHeight - gap * (statusHeight ? 2 : 1);
+    const scale = Math.min(1, availableWidth / plan.naturalWidth, imageHeight / plan.naturalHeight);
+    plan.style.width = Math.max(1, Math.floor(plan.naturalWidth * scale)) + 'px';
+    plan.style.height = Math.max(1, Math.floor(plan.naturalHeight * scale)) + 'px';
+  });
+}
+window.addEventListener('resize', scheduleAlarmFit);
+plan.addEventListener('load', scheduleAlarmFit);
+if (document.fonts) document.fonts.ready.then(scheduleAlarmFit);
 function play(index) {
   const item = playlist.items[index];
   const element = document.createElement(item.isVideo ? 'video' : 'img');
@@ -98,7 +158,7 @@ async function refresh() {
     const url = alarm && alarm.floorPlanUrl;
     const appearance = state.marker;
     title.textContent = alarm ? (alarm.description || alarm.point) : '待機中';
-    title.style.fontSize = alarm && appearance ? appearance.alarmTextSize + 'px' : '';
+    alarmTextSize = appearance?.alarmTextSize || 48;
     const imageOnly = !!(url && appearance && appearance.imageOnly);
     document.body.classList.toggle('image-only', imageOnly);
     frame.hidden = !url;
@@ -121,6 +181,7 @@ async function refresh() {
   } catch {
     status.textContent = '顯示服務連線中斷';
   } finally {
+    scheduleAlarmFit();
     setTimeout(refresh, 2000);
   }
 }
