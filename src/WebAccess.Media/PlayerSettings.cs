@@ -8,7 +8,16 @@ public sealed record PlaylistItem(string File, string Name, int Seconds)
 }
 
 public sealed record PointPlan(string Point, string File, int X, int Y,
-    string Icon = "dot", bool Flash = true, bool ImageOnly = false, string? IconFile = null);
+    string Icon = "dot", bool Flash = true, bool ImageOnly = false, string? IconFile = null,
+    string? AlarmText = null, int AlarmTextSize = PointPlan.DefaultAlarmTextSize, int IconSize = PointPlan.DefaultIconSize)
+{
+    public const int DefaultAlarmTextSize = 48;
+    public const int DefaultIconSize = 26;
+    public const int MinAlarmTextSize = 16;
+    public const int MaxAlarmTextSize = 120;
+    public const int MinIconSize = 20;
+    public const int MaxIconSize = 160;
+}
 public sealed record FloorImage(string File, string Name);
 
 public sealed record Playlist(int Revision, PlaylistItem[] Items, bool IsMuted, string Marquee, bool MarqueeAtTop,

@@ -1,0 +1,11 @@
+@font-face {
+    font-family: "Noto Sans TC";
+    src: url("/fonts/NotoSansTC.ttf") format("truetype");
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+}
+
+:root {
+    --app-font: "Noto Sans TC", "Source Han Sans TC", "Microsoft JhengHei", sans-serif;
+}

@@ -10,6 +10,7 @@ public sealed class AlarmAppearanceSteps : IDisposable
     private readonly DirectoryInfo _directory = Directory.CreateTempSubdirectory();
     private PointPlan? _plan;
     private string? _file;
+    private Alarm? _alarm;
 
     [Given("載入沒有圖示欄位的測點設定")]
     public void GivenLegacyPlan() =>
@@ -21,6 +22,8 @@ public sealed class AlarmAppearanceSteps : IDisposable
         Assert.That(_plan?.Icon, Is.EqualTo("dot"));
         Assert.That(_plan?.Flash, Is.True);
         Assert.That(_plan?.ImageOnly, Is.False);
+        Assert.That(_plan?.AlarmTextSize, Is.EqualTo(PointPlan.DefaultAlarmTextSize));
+        Assert.That(_plan?.IconSize, Is.EqualTo(PointPlan.DefaultIconSize));
     }
 
     [When("上傳工程平面圖")]
@@ -39,6 +42,28 @@ public sealed class AlarmAppearanceSteps : IDisposable
         Assert.That(storage.FindEngineeringMedia(_file!), Is.Not.Null);
         Assert.That(storage.FindMedia(_file!), Is.Null);
     }
+
+    [Given("測點 A 設定自訂文字「(.*)」與指定尺寸")]
+    public void GivenCustomAlarmText(string text) =>
+        _plan = new PointPlan("A", "a.png", 25, 75, AlarmText: text, AlarmTextSize: 64, IconSize: 80);
+
+    [When("測點 A 回報 API 警報文字「(.*)」")]
+    public void WhenApiAlarm(string text) => _alarm = new Alarm("A", Description: text);
+
+    [Then("顯示文字「(.*)」並沿用設定尺寸與位置")]
+    public void ThenCustomAppearance(string text)
+    {
+        (Alarm? alarm, PointPlan? marker) = AlarmDisplay.SelectRegistered([_alarm!], [_plan!]);
+        Assert.That(alarm?.Description, Is.EqualTo(text));
+        Assert.That(marker, Is.EqualTo(_plan));
+    }
+
+    [When("清空測點 A 的自訂警報文字")]
+    public void WhenClearText() => _plan = _plan! with { AlarmText = " " };
+
+    [Then("顯示 API 警報文字「(.*)」")]
+    public void ThenApiText(string text) =>
+        Assert.That(AlarmDisplay.SelectRegistered([_alarm!], [_plan!]).Alarm?.Description, Is.EqualTo(text));
 
     public void Dispose() => _directory.Delete(recursive: true);
 }
