@@ -49,6 +49,7 @@
     .canvas-empty h3 { margin: 0 0 .35rem; font-size: 1rem; }
     #alarm-preview-group { min-width: 0; max-width: 100%; }
     .plan { position: relative; display: inline-block; max-width: 100%; cursor: crosshair; }
+    #plan:not(.alarm-frame) { cursor: default; }
     .plan img { max-width: 100%; max-height: 66vh; display: block; }
     #alarm-preview { max-width: 100%; margin-bottom: .65rem; line-height: 1.2; overflow-wrap: anywhere; white-space: pre-wrap; }
     .marker { position: absolute; transform: translate(-50%, -50%); cursor: grab; touch-action: none; }
@@ -67,6 +68,10 @@
     .icon-option { display: flex; align-items: center; gap: .4rem; margin: 0; padding: .35rem; border: 1px solid var(--border); border-radius: .4rem; font-size: .85rem; }
     .icon-option:has(:checked) { border-color: var(--accent); background: var(--accent-soft); }
     .check { display: flex; align-items: center; }
+    .display-mode { align-items: start; gap: .6rem; padding: .65rem; background: var(--accent-soft); border-radius: .4rem; }
+    .display-mode span, .display-mode small { display: block; }
+    .display-mode small { margin-top: .2rem; }
+    .display-mode input[type="checkbox"] { margin-top: .25rem; }
     .icon-option input, .check input { width: auto; margin: 0; }
     [hidden] { display: none !important; }
     .inspector { padding: 1rem; min-width: 0; }
@@ -189,7 +194,7 @@
             <div class="canvas card">
                 <div class="canvas-heading">
                     <h2>平面圖預覽</h2>
-                    <p class="muted" id="position-hint" hidden="@(Model.Selected is null)">點選底圖或拖曳圖示即可定位</p>
+                    <p class="muted" id="position-hint" hidden="@(Model.Selected is null || Model.Selected.ImageOnly)">點選底圖或拖曳圖示即可定位</p>
                 </div>
                 <div class="canvas-stage">
                     <div id="empty-plan" class="canvas-empty" hidden="@(Model.Selected is not null)">
@@ -239,6 +244,14 @@
                                 </select>
                             </label>
                             <label>或上傳新底圖 <input name="image" id="file" type="file" accept=".png,.jpg,.jpeg"></label>
+                            <label class="check display-mode">
+                                <input type="checkbox" name="imageOnly" id="image-only" value="true"
+                                       checked="@(Model.Selected?.ImageOnly ?? false)" aria-labelledby="image-only-label" aria-describedby="image-only-help">
+                                <span>
+                                    <strong id="image-only-label">全頁只顯示圖片</strong>
+                                    <small id="image-only-help">勾選後隱藏警報文字與圖示，無需設定位置。</small>
+                                </span>
+                            </label>
                         </div>
                     </details>
                     <details>
@@ -287,7 +300,6 @@
                                 <input name="customIcon" id="custom-icon" type="file" accept=".png,.jpg,.jpeg" data-existing="@Model.Selected?.IconFile">
                             </label>
                             <label class="check"><input type="checkbox" name="flash" id="flash" value="true" checked="@(Model.Selected?.Flash ?? true)">閃爍警報圖示</label>
-                            <label class="check"><input type="checkbox" name="imageOnly" id="image-only" value="true" checked="@(Model.Selected?.ImageOnly ?? false)">全頁只顯示圖片</label>
                         </div>
                     </details>
                 </form>
@@ -370,6 +382,7 @@ window.addEventListener('beforeunload', event => {
 });
 const image = document.getElementById('image');
 const previewGroup = document.getElementById('alarm-preview-group');
+const positionHint = document.getElementById('position-hint');
 const previewText = document.getElementById('alarm-preview');
 const alarmText = document.getElementById('alarm-text');
 const suggestedText = document.getElementById('suggested-alarm-text');
@@ -421,6 +434,9 @@ point.addEventListener('change', () => {
     suggestText('');
     loadSuggestedText();
 });
+function updatePositionHint() {
+    positionHint.hidden = previewGroup.hidden || imageOnly.checked;
+}
 function updateIcon() {
     const icon = document.querySelector('input[name=icon]:checked').value;
     const isCustom = icon === 'custom';
@@ -429,6 +445,7 @@ function updateIcon() {
     marker.style.setProperty('--icon-size', previewSize(iconSize));
     marker.hidden = imageOnly.checked;
     planFrame.classList.toggle('alarm-frame', !marker.hidden);
+    updatePositionHint();
     updateText();
     document.getElementById('custom-icon-field').hidden = !isCustom;
     customIcon.disabled = !isCustom;
@@ -478,6 +495,7 @@ function updateMarker() {
 x.addEventListener('input', updateMarker);
 y.addEventListener('input', updateMarker);
 function locate(event) {
+    if (imageOnly.checked) return;
     const bounds = image.getBoundingClientRect();
     if (!bounds.width || !bounds.height) return;
     x.value = Math.max(0, Math.min(100, Math.round(100 * (event.clientX - bounds.left) / bounds.width)));
@@ -606,7 +624,7 @@ function updatePlan() {
     previewGroup.hidden = !source;
     openSimulation.disabled = !source;
     document.getElementById('empty-plan').hidden = !!source;
-    document.getElementById('position-hint').hidden = !source;
+    updatePositionHint();
     const activeFloor = file ? '' : sharedFile.value || sharedFile.dataset.currentFloor;
     for (const card of grid.querySelectorAll('[data-floor]')) {
         card.setAttribute('aria-pressed', String(card.dataset.floor === activeFloor));
