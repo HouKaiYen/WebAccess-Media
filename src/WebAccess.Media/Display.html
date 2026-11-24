@@ -102,6 +102,7 @@ async function refresh() {
     frame.hidden = !url;
     if (url && plan.getAttribute('src') !== url) plan.src = url;
     marker.hidden = !url || !appearance || imageOnly;
+    frame.classList.toggle('alarm-frame', !marker.hidden);
     if (!marker.hidden) {
       marker.style.left = appearance.x + '%';
       marker.style.top = appearance.y + '%';
