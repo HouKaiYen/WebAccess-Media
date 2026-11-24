@@ -1,33 +1,23 @@
 @page "/engineering/connection"
 @model WebAccess.Media.Pages.EngineeringModel
 @addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
-<!doctype html>
-<html lang="zh-Hant">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>工程設定 · WebAccess Media</title>
-    <style>
-        * { box-sizing: border-box; }
-        body { margin: 0; background: #101923; color: #eef4fa; font: 1rem/1.55 system-ui, sans-serif; }
-        header { border-bottom: 1px solid #334858; }
-        nav, main { max-width: 720px; margin: auto; padding: 1.25rem; }
-        nav { display: flex; justify-content: space-between; }
-        a { color: #9bdce6; }
+@{ Layout = "_ManagementLayout"; ViewData["Title"] = "WebAccess 連線"; }
+
+@section Styles {
+<style>
         form { display: grid; gap: .9rem; background: #182633; border: 1px solid #334858; border-radius: .6rem; padding: 1.5rem; }
         label { display: grid; gap: .3rem; }
-        input { width: 100%; font: inherit; color: inherit; background: #101923; border: 1px solid #617789; padding: .6rem; border-radius: .3rem; }
         small { color: #c2d2df; }
         .actions { display: flex; flex-wrap: wrap; gap: .65rem; margin-top: .45rem; }
-        button { cursor: pointer; font: inherit; font-weight: 600; padding: .6rem .9rem; border: 1px solid #83ceda; border-radius: .3rem; color: #d5f4fa; background: transparent; }
-        button.primary { color: #101923; background: #a5e1eb; }
         .feedback { border-left: 4px solid; padding: .6rem .9rem; background: #182633; }
         .success { color: #9de6bd; }
         .error { color: #ffc47a; }
-    </style>
-</head>
-<body>
-<header><nav><strong>WebAccess Media</strong><a href="/engineering">測點頁面</a><a href="/settings">日常管理</a><a href="/display">開啟顯示頁</a></nav></header>
+
+        main { max-width: 720px; margin: auto; padding: 1.25rem; }
+        input { width: 100%; }
+</style>
+}
+
 <main>
     <h1>WebAccess 連線</h1>
     @if (Model.Feedback is string feedback)
@@ -51,5 +41,3 @@
         </div>
     </form>
 </main>
-</body>
-</html>
