@@ -12,7 +12,7 @@
 
 ## Windows 通知區
 
-使用 `Start-WebAccess-Media.cmd` 啟動後，Windows 通知區會顯示 WebAccess Media 圖示。若圖示收在溢位選單，請點右下角的「^」。滑鼠停留或按右鍵可查看服務與 WebAccess 連線狀態，雙擊可開啟日常管理。可從右鍵選單結束圖示，服務會繼續執行。通知區圖示需要已登入 Windows 的桌面工作階段。
+使用 `Start-WebAccess-Media.cmd` 啟動後，Windows 通知區會顯示 WebAccess Media 圖示。若圖示收在溢位選單，請點右下角的「^」。滑鼠停留或按右鍵可查看服務與 WebAccess 連線狀態，雙擊可開啟日常管理。選擇「結束 WebAccess Media」會停止該圖示對應的服務並收起圖示，該服務的播放與監控也會停止。通知區圖示需要已登入 Windows 的桌面工作階段。
 
 ## 工程設定
 

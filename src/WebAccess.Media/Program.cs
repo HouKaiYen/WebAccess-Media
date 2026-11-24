@@ -93,6 +93,6 @@ app.MapGet("/engineering-media/{file}", (string file, PlayerSettings player, Htt
 });
 if (OperatingSystem.IsWindows() && app.Configuration.GetValue<bool>("Tray:Enabled"))
 {
-    app.Lifetime.ApplicationStarted.Register(() => WindowsTrayLauncher.Start(app));
+    app.Lifetime.ApplicationStarted.Register(() => _ = WindowsTrayLauncher.RunAsync(app));
 }
 app.Run();

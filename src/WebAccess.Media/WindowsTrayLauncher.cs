@@ -6,7 +6,7 @@ namespace WebAccess.Media;
 
 internal static class WindowsTrayLauncher
 {
-    public static void Start(WebApplication app)
+    public static async Task RunAsync(WebApplication app)
     {
         Uri? localAddress = app.Urls.Select(AsLoopback).FirstOrDefault(address => address is not null);
         if (localAddress is null)
@@ -18,9 +18,26 @@ internal static class WindowsTrayLauncher
         string executable = Path.Combine(AppContext.BaseDirectory, "tray", "WebAccess.Media.Tray.exe");
         try
         {
-            ProcessStartInfo start = new(executable) { UseShellExecute = false };
-            start.ArgumentList.Add(localAddress.AbsoluteUri);
-            using Process? process = Process.Start(start);
+            string eventName = $@"Local\WebAccess.Media.Shutdown.{Guid.NewGuid():N}";
+            using EventWaitHandle shutdown = new(false, EventResetMode.ManualReset, eventName);
+            RegisteredWaitHandle wait = ThreadPool.RegisterWaitForSingleObject(shutdown,
+                (_, _) => app.Lifetime.StopApplication(), null, Timeout.Infinite, executeOnlyOnce: true);
+            try
+            {
+                ProcessStartInfo start = new(executable) { UseShellExecute = false };
+                start.ArgumentList.Add(localAddress.AbsoluteUri);
+                start.ArgumentList.Add(Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                start.ArgumentList.Add(eventName);
+                using Process? process = Process.Start(start);
+                await Task.Delay(Timeout.InfiniteTimeSpan, app.Lifetime.ApplicationStopped);
+            }
+            finally
+            {
+                wait.Unregister(null);
+            }
+        }
+        catch (OperationCanceledException) when (app.Lifetime.ApplicationStopped.IsCancellationRequested)
+        {
         }
         catch (Exception error) when (error is Win32Exception or InvalidOperationException)
         {
