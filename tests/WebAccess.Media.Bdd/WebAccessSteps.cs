@@ -19,10 +19,9 @@ public sealed class WebAccessSteps
                 ["WebAccess:ApiBase"] = "http://example.invalid/api/",
                 ["WebAccess:Project"] = "測試 A",
                 ["WebAccess:Username"] = "demo",
-                ["WebAccess:Password"] = "mock",
-                ["FloorPlans:A"] = "/a.png"
+                ["WebAccess:Password"] = "mock"
             }).Build();
-        WebAccessClient client = new(new HttpClient(_handler), configuration);
+        WebAccessClient client = new(new HttpClient(_handler));
         EngineeringSettings settings = new(
             Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
             new EphemeralDataProtectionProvider().CreateProtector("test"),
@@ -34,7 +33,7 @@ public sealed class WebAccessSteps
     public async Task GivenAlarm()
     {
         await PollAsync("""{"Result":{"Ret":0,"Total":1},"AlarmTagList":[{"Name":"A","Desc":"測試告警","Time":"26/11/24 09:00:00"}]}""");
-        Assert.That(_monitor.State.Alarm, Is.EqualTo(new Alarm("A", "/a.png", "測試告警")));
+        Assert.That(_monitor.State.Alarms, Is.EqualTo(new[] { new Alarm("A", Description: "測試告警") }));
     }
 
     [When("WebAccess 回傳不完整清單")]
@@ -43,7 +42,7 @@ public sealed class WebAccessSteps
     [Then("保留測點 A 並顯示連線異常")]
     public void ThenRetainsAlarm()
     {
-        Assert.That(_monitor.State.Alarm?.Point, Is.EqualTo("A"));
+        Assert.That(_monitor.State.Alarms.Single().Point, Is.EqualTo("A"));
         Assert.That(_monitor.State.LastSuccessAt, Is.Not.Null);
         Assert.That(_monitor.State.ConnectionStatus, Is.EqualTo("disconnected"));
     }
@@ -54,7 +53,7 @@ public sealed class WebAccessSteps
     [Then("恢復待機並顯示已連線")]
     public void ThenIdle()
     {
-        Assert.That(_monitor.State.Alarm, Is.Null);
+        Assert.That(_monitor.State.Alarms, Is.Empty);
         Assert.That(_monitor.State.ConnectionStatus, Is.EqualTo("connected"));
     }
 

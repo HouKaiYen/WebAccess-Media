@@ -1,6 +1,5 @@
 using System.Net;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.Extensions.Configuration;
 using NUnit.Framework;
 using Reqnroll;
 using WebAccess.Media;
@@ -63,7 +62,7 @@ public sealed class EngineeringSettingsSteps : IDisposable
                 }
             });
         return new EngineeringSettings(_directory.FullName, provider.CreateProtector("test"),
-            new WebAccessClient(_httpClient, new ConfigurationBuilder().Build()));
+            new WebAccessClient(_httpClient));
     }
 
     public void Dispose()

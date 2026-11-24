@@ -19,8 +19,7 @@ builder.Services.AddHttpClient("WebAccess", client => client.Timeout = TimeSpan.
     .RemoveAllLoggers()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddSingleton(services => new WebAccessClient(
-    services.GetRequiredService<IHttpClientFactory>().CreateClient("WebAccess"),
-    services.GetRequiredService<IConfiguration>()));
+    services.GetRequiredService<IHttpClientFactory>().CreateClient("WebAccess")));
 builder.Services.AddSingleton(services => new EngineeringSettings(
     settingsDirectory,
     services.GetRequiredService<IDataProtectionProvider>().CreateProtector("WebAccess.Connection.v1"),
@@ -57,10 +56,7 @@ app.MapGet("/api/display", (WebAccessAlarmMonitor monitor, PlayerSettings player
 {
     WebAccessDisplayState state = monitor.State;
     Playlist playlist = player.Read();
-    PointPlan? marker = playlist.PointPlans?.FirstOrDefault(plan => plan.Point == state.Alarm?.Point);
-    Alarm? alarm = marker is null || state.Alarm is null
-        ? state.Alarm
-        : state.Alarm with { FloorPlanUrl = $"/media/{marker.File}" };
+    (Alarm? alarm, PointPlan? marker) = AlarmDisplay.SelectRegistered(state.Alarms, playlist.PointPlans ?? []);
     return Results.Ok(new
     {
         Alarm = alarm, Marker = marker is null ? null : new { marker.X, marker.Y },
