@@ -46,15 +46,18 @@ public sealed class PointsModel(
         }
     }
 
-    public async Task<IActionResult> OnPostUploadFloorImagesAsync(List<IFormFile> images, string? selected)
+    public async Task<IActionResult> OnPostUploadFloorImagesAsync(List<IFormFile> images, int revision)
     {
         if (images.Count is < 1 or > 20 || images.Any(image => !IsFloorImage(image)))
         {
-            Feedback = "請選取 1–20 張 PNG 或 JPEG。";
-            return RedirectToPage(new { selected, add = selected is null });
+            return LibraryError("請選取 1–20 張 PNG 或 JPEG。", 400);
         }
 
         Playlist playlist = storage.Read();
+        if (playlist.Revision != revision)
+        {
+            return LibraryError("設定已更新，請重新整理頁面後再上傳。", 409);
+        }
         List<FloorImage> uploaded = [];
         bool saved = false;
         try
@@ -64,12 +67,14 @@ public sealed class PointsModel(
                 string file = await storage.UploadEngineeringAsync(image, HttpContext.RequestAborted);
                 uploaded.Add(new FloorImage(file, Path.GetFileName(image.FileName)));
             }
-            saved = storage.Save(playlist with { FloorImages = [.. (playlist.FloorImages ?? []), .. uploaded] });
-            Feedback = saved ? $"已加入 {uploaded.Count} 張平面圖。" : "設定已更新，請重新上傳。";
+            Playlist updated = playlist with { FloorImages = [.. (playlist.FloorImages ?? []), .. uploaded] };
+            saved = storage.Save(updated);
+            return saved ? LibraryResult(updated, $"已加入 {uploaded.Count} 張平面圖。")
+                : LibraryError("設定已更新，請重新整理頁面後再上傳。", 409);
         }
         catch (InvalidDataException error)
         {
-            Feedback = error.Message;
+            return LibraryError(error.Message, 400);
         }
         finally
         {
@@ -81,8 +86,53 @@ public sealed class PointsModel(
                 }
             }
         }
-        return RedirectToPage(new { selected, add = selected is null });
     }
+
+    public IActionResult OnPostDeleteFloorImage(string? file, int revision)
+    {
+        Playlist playlist = storage.Read();
+        if (playlist.Revision != revision)
+        {
+            return LibraryError("設定已更新，請重新整理頁面後再刪除。", 409);
+        }
+        string[] usingPoints = (playlist.PointPlans ?? [])
+            .Where(plan => plan.File == file || plan.IconFile == file)
+            .Select(plan => plan.Point).ToArray();
+        if (usingPoints.Length > 0)
+        {
+            return LibraryError($"這張圖片仍由測點 {string.Join("、", usingPoints)} 使用。請先更換圖片。", 409);
+        }
+        FloorImage[] images = playlist.FloorImages ?? [];
+        FloorImage[] remaining = images.Where(image => image.File != file).ToArray();
+        if (file is null || remaining.Length == images.Length)
+        {
+            return LibraryError("找不到這張共用平面圖。", 404);
+        }
+        Playlist updated = playlist with { FloorImages = remaining };
+        if (!storage.Save(updated))
+        {
+            return LibraryError("設定已更新，請重新整理頁面後再刪除。", 409);
+        }
+        try
+        {
+            storage.RemoveEngineeringMedia(file);
+        }
+        catch (IOException)
+        {
+            return LibraryResult(updated, "已從圖庫移除，圖片檔案暫時無法刪除。");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return LibraryResult(updated, "已從圖庫移除，圖片檔案無法刪除。");
+        }
+        return LibraryResult(updated, "已刪除平面圖。");
+    }
+
+    private JsonResult LibraryResult(Playlist updated, string message) =>
+        new(new { revision = updated.Revision + 1, images = GetFloorImages(updated), message });
+
+    private static JsonResult LibraryError(string message, int statusCode) =>
+        new(new { message }) { StatusCode = statusCode };
 
     public async Task<IActionResult> OnPostSaveAsync(
         string? point, int x, int y, IFormFile? image, string? sharedFile, int revision, bool isNew,

@@ -22,6 +22,8 @@
     .marker { position: absolute; transform: translate(-50%, -50%); cursor: grab; touch-action: none; }
     .floor-grid, .icon-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; margin-bottom: .75rem; }
     .floor-card { display: grid; gap: .35rem; padding: .35rem; overflow: hidden; }
+    .floor-entry { display: grid; align-content: start; gap: .25rem; min-width: 0; }
+    .floor-delete { justify-self: end; padding: .15rem .4rem; font-size: .8rem; color: #a42c3e; }
     .floor-card img { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: var(--background); }
     .floor-card span { text-overflow: ellipsis; overflow: hidden; white-space: nowrap; font-size: .8rem; }
     .icon-option { display: flex; align-items: center; gap: .4rem; margin: 0; padding: .35rem; border: 1px solid var(--border); border-radius: .4rem; font-size: .85rem; }
@@ -37,6 +39,15 @@
     .remove { margin-top: .6rem; }
     @@media (max-width: 800px) { .editor { grid-template-columns: 1fr; } }
     @@media (max-width: 560px) { .workspace { grid-template-columns: 1fr; } aside { border-right: 0; border-bottom: 1px solid var(--line); } .canvas { min-height: 240px; } }
+    @@media (min-width: 801px) {
+        body { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+        .workspace { flex: 1; min-height: 0; }
+        .workspace > aside, .inspector { min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; }
+        main { display: flex; flex-direction: column; min-height: 0; }
+        .editor { flex: 1; min-height: 0; }
+        .canvas { min-height: 0; align-self: stretch; overflow: hidden; }
+        .plan > #image { max-height: 58vh; }
+    }
 
     input { width: 100%; }
     .tag-picker { width: min(34rem, calc(100vw - 2rem)); max-height: 90vh; padding: 1rem; border: 1px solid var(--border); color: var(--text); }
@@ -50,7 +61,7 @@
 }
 
 <div class="workspace">
-    <aside>
+    <aside aria-label="測點頁面與共用平面圖" tabindex="0">
         <a class="action" href="/engineering?add=true">＋ 新增測點頁面</a>
         <h2>測點頁面</h2>
         @if (Model.Plans.Length == 0)
@@ -65,18 +76,20 @@
         </ul>
         <h2>共用平面圖</h2>
         <p class="muted">一次上傳多張底圖，供各測點頁面選用。</p>
-        <form method="post" asp-page-handler="UploadFloorImages" enctype="multipart/form-data">
-            <input type="hidden" name="selected" value="@Model.Selected?.Point">
-            <label>批次選取底圖 <input name="images" type="file" multiple accept=".png,.jpg,.jpeg" required></label>
-            <button type="submit">加入共用圖庫</button>
+        <form id="floor-upload" method="post" asp-page-handler="UploadFloorImages" enctype="multipart/form-data">
+            <label>選取底圖即上傳 <input id="floor-upload-input" name="images" type="file" multiple accept=".png,.jpg,.jpeg"></label>
         </form>
-        <p class="muted">@Model.FloorImages.Length 張圖可供測點選用</p>
-        <div class="floor-grid">
+        <p id="floor-status" class="feedback" role="status"></p>
+        <p class="muted" id="floor-count">@Model.FloorImages.Length 張圖可供測點選用</p>
+        <div class="floor-grid" id="floor-grid">
             @foreach (WebAccess.Media.FloorImage floor in Model.FloorImages)
             {
-                <button class="floor-card" type="button" data-floor="@floor.File" title="@floor.Name">
-                    <img src="/engineering-media/@floor.File" alt="" loading="lazy"><span>@floor.Name</span>
-                </button>
+                <div class="floor-entry">
+                    <button class="floor-card" type="button" data-floor="@floor.File" title="@floor.Name">
+                        <img src="/engineering-media/@floor.File" alt="" loading="lazy"><span>@floor.Name</span>
+                    </button>
+                    <button class="floor-delete" type="button" data-delete="@floor.File" aria-label="刪除 @floor.Name">刪除</button>
+                </div>
             }
         </div>
     </aside>
@@ -106,10 +119,10 @@
                 </div>
                 </div>
             </div>
-            <div class="inspector card">
-                <h2>測點與告警位置</h2>
+            <div class="inspector card" role="region" aria-labelledby="inspector-title" tabindex="0">
+                <h2 id="inspector-title">測點與告警位置</h2>
                 <form method="post" asp-page-handler="Save" enctype="multipart/form-data">
-                    <input name="revision" type="hidden" value="@Model.Revision">
+                    <input id="point-revision" name="revision" type="hidden" value="@Model.Revision">
                     <input name="isNew" type="hidden" value="@(Model.Selected is null ? "true" : "false")">
                     <label>測點 Name <input id="point-name" name="point" value="@Model.Selected?.Point" required maxlength="256" readonly="@(Model.Selected is not null)"></label>
                     @if (Model.Selected is null)
@@ -167,7 +180,7 @@
                         <label class="check"><input type="checkbox" name="flash" id="flash" value="true" checked="@(Model.Selected?.Flash ?? true)">閃爍警報圖示</label>
                         <label class="check"><input type="checkbox" name="imageOnly" id="image-only" value="true" checked="@(Model.Selected?.ImageOnly ?? false)">全頁只顯示圖片</label>
                     </fieldset>
-                    <button class="primary" type="submit">儲存設定</button>
+                    <button id="save-point" class="primary" type="submit">儲存設定</button>
                 </form>
                 @if (Model.Selected is WebAccess.Media.PointPlan current)
                 {
@@ -177,6 +190,12 @@
         </div>
     </main>
 </div>
+<template id="floor-entry">
+    <div class="floor-entry">
+        <button class="floor-card" type="button"><img alt="" loading="lazy"><span></span></button>
+        <button class="floor-delete" type="button">刪除</button>
+    </div>
+</template>
 @if (Model.Selected is null)
 {
     <dialog class="tag-picker card" id="tag-picker" aria-labelledby="tag-picker-title">
@@ -367,11 +386,75 @@ sharedFile.addEventListener('change', () => {
     fileInput.value = '';
     updatePlan();
 });
-for (const card of document.querySelectorAll('[data-floor]')) {
-    card.addEventListener('click', () => {
+const grid = document.getElementById('floor-grid');
+const libraryForm = document.getElementById('floor-upload');
+const uploadInput = document.getElementById('floor-upload-input');
+const libraryStatus = document.getElementById('floor-status');
+const revision = document.getElementById('point-revision');
+const savePoint = document.getElementById('save-point');
+let libraryBusy = false;
+function renderLibrary(images) {
+    const selectedFile = sharedFile.value;
+    sharedFile.replaceChildren(sharedFile.options[0]);
+    grid.replaceChildren();
+    for (const floor of images) {
+        sharedFile.add(new Option(floor.name, floor.file));
+        const entry = document.getElementById('floor-entry').content.cloneNode(true);
+        const card = entry.querySelector('.floor-card');
+        const remove = entry.querySelector('.floor-delete');
+        card.dataset.floor = floor.file;
+        card.title = floor.name;
+        card.querySelector('img').src = '/engineering-media/' + encodeURIComponent(floor.file);
+        card.querySelector('span').textContent = floor.name;
+        remove.dataset.delete = floor.file;
+        remove.setAttribute('aria-label', '刪除 ' + floor.name);
+        grid.append(entry);
+    }
+    sharedFile.value = images.some(floor => floor.file === selectedFile) ? selectedFile : '';
+    document.getElementById('floor-count').textContent = images.length + ' 張圖可供測點選用';
+    updatePlan();
+}
+async function updateLibrary(endpoint, body, pending) {
+    if (libraryBusy) return;
+    libraryBusy = true;
+    uploadInput.disabled = true;
+    savePoint.disabled = true;
+    libraryStatus.textContent = pending;
+    try {
+        body.set('revision', revision.value);
+        const response = await fetch(endpoint, { method: 'POST', body });
+        const result = await response.json();
+        libraryStatus.textContent = result.message;
+        if (response.ok) {
+            revision.value = result.revision;
+            renderLibrary(result.images);
+        }
+    } catch {
+        libraryStatus.textContent = '圖庫操作未完成。請確認連線或檔案大小後再試。';
+    } finally {
+        libraryBusy = false;
+        uploadInput.disabled = false;
+        savePoint.disabled = false;
+        uploadInput.value = '';
+    }
+}
+uploadInput.addEventListener('change', () => {
+    if (uploadInput.files.length) updateLibrary(libraryForm.action, new FormData(libraryForm), '正在上傳底圖…');
+});
+grid.addEventListener('click', event => {
+    const card = event.target.closest('[data-floor]');
+    if (card) {
         sharedFile.value = card.dataset.floor;
         fileInput.value = '';
         updatePlan();
-    });
-}
+        return;
+    }
+    const remove = event.target.closest('[data-delete]');
+    if (!remove || libraryBusy) return;
+    if (!window.confirm('確定要刪除這張共用平面圖？')) return;
+    const body = new FormData(libraryForm);
+    body.delete('images');
+    body.set('file', remove.dataset.delete);
+    updateLibrary('/engineering?handler=DeleteFloorImage', body, '正在刪除底圖…');
+});
 </script>
