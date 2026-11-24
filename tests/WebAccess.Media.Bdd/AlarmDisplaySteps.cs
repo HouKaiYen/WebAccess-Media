@@ -5,25 +5,27 @@ using WebAccess.Media;
 [Binding]
 public sealed class AlarmDisplaySteps
 {
-    private AlarmDisplay _display = new();
+    private readonly PointPlan[] _plans = [new("A", "a.png", 50, 50), new("B", "b.png", 50, 50)];
+    private Alarm[] _alarms = [];
 
     [Given("目前沒有告警")]
-    public void GivenNoAlarms() => _display = new AlarmDisplay();
+    public void GivenNoAlarms() => _alarms = [];
 
     [When("收到 A 與 B 的有效告警")]
     public void WhenBothAlarmsAreActive() =>
-        _display.Update([new("A", "/a.png"), new("B", "/b.png")]);
+        _alarms = [new("A"), new("B")];
 
     [When("A 解除而 B 仍有效")]
-    public void WhenAlarmAClears() => _display.Update([new("B", "/b.png")]);
+    public void WhenAlarmAClears() => _alarms = [new("B")];
 
     [When("所有告警解除")]
-    public void WhenAllAlarmsClear() => _display.Update([]);
+    public void WhenAllAlarmsClear() => _alarms = [];
 
     [Then("畫面顯示 (.*) 的平面圖")]
     public void ThenShowsFloorPlan(string point) =>
-        Assert.That(_display.Current?.FloorPlanUrl, Is.EqualTo($"/{point.ToLowerInvariant()}.png"));
+        Assert.That(AlarmDisplay.SelectRegistered(_alarms, _plans).Alarm?.FloorPlanUrl,
+            Is.EqualTo($"/media/{point.ToLowerInvariant()}.png"));
 
     [Then("畫面顯示待機內容")]
-    public void ThenShowsIdleContent() => Assert.That(_display.Current, Is.Null);
+    public void ThenShowsIdleContent() => Assert.That(AlarmDisplay.SelectRegistered(_alarms, _plans).Alarm, Is.Null);
 }

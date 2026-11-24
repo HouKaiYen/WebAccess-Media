@@ -4,7 +4,7 @@ using System.Text.Json;
 
 namespace WebAccess.Media;
 
-public sealed class WebAccessClient(HttpClient client, IConfiguration configuration)
+public sealed class WebAccessClient(HttpClient client)
 {
     public async Task<IReadOnlyList<Alarm>> GetAlarmsAsync(ConnectionSettings settings, CancellationToken cancellationToken)
     {
@@ -45,7 +45,7 @@ public sealed class WebAccessClient(HttpClient client, IConfiguration configurat
                 throw new JsonException("WebAccess 告警欄位無效。");
             }
 
-            alarms.Add(new Alarm(point, configuration.GetSection("FloorPlans")[point], description));
+            alarms.Add(new Alarm(point, Description: description));
         }
         return alarms;
     }

@@ -51,20 +51,12 @@ BrightSign 開啟 `http://<Windows 主機 IP>:3008/display`。若需新增防火
 ## 現場驗收
 
 1. **連線**：開啟 `/api/display`，確認 `connectionStatus` 為 `connected`。此時若 `alarm` 為 `null`，表示 WebAccess 回傳完整的空告警清單。
-2. **觸發**：對測試測點觸發告警，確認顯示頁出現測點名稱及描述。有設定該測點的平面圖網址時，畫面也會顯示圖片。
-3. **解除**：解除測試告警，確認最後一筆解除後回到待機。
+2. **觸發**：先在工程設定新增測試測點，再觸發告警。確認顯示頁出現測點名稱、描述、平面圖及標記。只觸發未新增的測點時，畫面維持待機輪播。
+3. **解除**：解除所有已新增測點的告警，確認畫面回到待機。未新增測點仍有告警時，也應恢復待機。
 4. **復原**：在測試環境模擬 WebAccess 暫時無法連線，確認畫面保留最後已知告警與更新時間。恢復後確認畫面同步最新狀態。
 5. **重啟**：在同一 Windows 帳號下停止並重新執行程式，確認能自動重新連線。
 
-既有部署也可使用執行檔同一資料夾的 `appsettings.json` 提供備用平面圖。測點頁面上傳的平面圖優先使用。
-
-```json
-{
-  "FloorPlans": {
-    "AlarmTagA": "https://media.example.com/floor-a.png"
-  }
-}
-```
+從舊版更新時，若測點只設定在 `appsettings.json` 的 `FloorPlans`，請到工程設定新增測點並上傳平面圖，讓該測點能觸發顯示頁。
 
 ## 更新與備份
 
@@ -83,6 +75,6 @@ BDD 規格位於 `tests/WebAccess.Media.Bdd`，使用繁體中文 Gherkin、Reqn
 
 ## 目前版本範圍
 
-支援工程連線、測點平面圖與座標、待機輪播、跑馬燈及告警顯示。多筆告警採 API 清單順序。測點清單匯入、拖曳定位、PDF 輪播、共用媒體庫、系統匣、開機自啟與 MSI 安裝屬後續版本。
+支援工程連線、測點平面圖與座標、待機輪播、跑馬燈及告警顯示。同時有多個已新增測點告警時，依 API 清單順序顯示第一個。測點清單匯入、拖曳定位、PDF 輪播、共用媒體庫、系統匣、開機自啟與 MSI 安裝屬後續版本。
 
 API 呼叫與告警摘要契約參考 [BrightSign WebAccess Alarm Display](https://github.com/HouKaiYen/brightsign-webaccess-alarm-display)。

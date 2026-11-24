@@ -2,12 +2,19 @@ namespace WebAccess.Media;
 
 public sealed record Alarm(string Point, string? FloorPlanUrl = null, string? Description = null);
 
-public sealed class AlarmDisplay
+public static class AlarmDisplay
 {
-    public Alarm? Current { get; private set; }
-
-    public void Update(IReadOnlyList<Alarm> activeAlarms)
+    public static (Alarm? Alarm, PointPlan? Marker) SelectRegistered(
+        IReadOnlyList<Alarm> activeAlarms, IReadOnlyList<PointPlan> plans)
     {
-        Current = activeAlarms.FirstOrDefault();
+        foreach (Alarm alarm in activeAlarms)
+        {
+            PointPlan? plan = plans.FirstOrDefault(plan => plan.Point == alarm.Point);
+            if (plan is not null)
+            {
+                return (alarm with { FloorPlanUrl = $"/media/{plan.File}" }, plan);
+            }
+        }
+        return (null, null);
     }
 }

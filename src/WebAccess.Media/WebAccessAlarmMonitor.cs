@@ -1,11 +1,11 @@
 namespace WebAccess.Media;
 
-public sealed record WebAccessDisplayState(Alarm? Alarm, string ConnectionStatus, DateTimeOffset? LastSuccessAt = null);
+public sealed record WebAccessDisplayState(IReadOnlyList<Alarm> Alarms, string ConnectionStatus, DateTimeOffset? LastSuccessAt = null);
 
 public sealed class WebAccessAlarmMonitor(
     WebAccessClient client, EngineeringSettings settings, IConfiguration configuration) : BackgroundService
 {
-    private volatile WebAccessDisplayState _state = new(null, "unconfigured");
+    private volatile WebAccessDisplayState _state = new([], "unconfigured");
     private ConnectionSettings? _lastConnection;
 
     public WebAccessDisplayState State => _state;
@@ -27,21 +27,18 @@ public sealed class WebAccessAlarmMonitor(
             ConnectionSettings? connection = settings.Current ?? GetStartupConnection();
             if (connection != _lastConnection)
             {
-                _state = new(null, "connecting");
+                _state = new([], "connecting");
                 _lastConnection = connection;
             }
 
             if (connection is null)
             {
-                AlarmDisplay demo = new();
-                demo.Update(configuration.GetSection("ActiveAlarms").Get<Alarm[]>() ?? []);
-                _state = new(demo.Current, "unconfigured");
+                _state = new(configuration.GetSection("ActiveAlarms").Get<Alarm[]>() ?? [], "unconfigured");
                 return;
             }
 
-            AlarmDisplay display = new();
-            display.Update(await client.GetAlarmsAsync(connection, cancellationToken));
-            _state = new(display.Current, "connected", DateTimeOffset.UtcNow);
+            IReadOnlyList<Alarm> alarms = await client.GetAlarmsAsync(connection, cancellationToken);
+            _state = new(alarms, "connected", DateTimeOffset.UtcNow);
         }
         catch (Exception error) when (!cancellationToken.IsCancellationRequested &&
             (WebAccessClient.IsConnectionFailure(error) || error is IOException or UnauthorizedAccessException
