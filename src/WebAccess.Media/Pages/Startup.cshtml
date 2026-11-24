@@ -1,0 +1,39 @@
+@page "/engineering/startup"
+@model WebAccess.Media.Pages.StartupModel
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@{ Layout = "_ManagementLayout"; ViewData["Title"] = "開機自動啟動"; }
+
+@section Actions {
+    <button type="submit" form="startup-form" class="primary" disabled="@(!Model.IsAvailable)">儲存設定</button>
+}
+
+@section Styles {
+    <style>
+        main { width: min(100%, 720px); margin: auto; padding: 1.25rem; }
+        .startup-card { padding: 1.25rem; }
+        .startup-card label { display: flex; align-items: center; gap: .55rem; font-weight: 650; }
+        .startup-card p { color: var(--muted); margin-bottom: 0; }
+        .startup-status { margin-bottom: .75rem; }
+    </style>
+}
+
+<main>
+    <h1>開機自動啟動</h1>
+    @if (Model.Feedback is string feedback)
+    {
+        <p class="feedback" role="status">@feedback</p>
+    }
+    @if (Model.IsAvailable)
+    {
+        <form class="startup-card card" id="startup-form" method="post" asp-page-handler="Save">
+            <div class="startup-status muted">目前狀態：@(Model.IsEnabled ? "已開啟" : "已關閉")</div>
+            <label><input type="checkbox" name="enabled" value="true" checked="@Model.IsEnabled">開機時自動啟動 WebAccess Media</label>
+            <p>開機後無須登入即可監控。登入後會顯示通知區圖示。</p>
+            <p>首次建立排程需要管理員授權，並在 Windows 對話框輸入目前帳號的密碼。</p>
+        </form>
+    }
+    else
+    {
+        <p>開機設定需要可連到本機管理頁的完整 Windows 可攜套件及工作排程器。</p>
+    }
+</main>
