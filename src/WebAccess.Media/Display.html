@@ -8,6 +8,7 @@
 <style>
 body { margin: 0; background: #101923; color: #fff; font: 2rem var(--app-font); }
 main { padding: 4vw; }
+body.alarm-active main { text-align: center; }
 img { max-width: 100%; max-height: 75vh; object-fit: contain; }
 p { color: #ffc47a; }
 #title { overflow-wrap: anywhere; white-space: pre-wrap; }
@@ -92,6 +93,7 @@ async function refresh() {
     if (!response.ok) throw new Error();
     const state = await response.json();
     const alarm = preview ? null : state.alarm;
+    document.body.classList.toggle('alarm-active', !!alarm);
     setStandby(alarm ? null : state.playlist);
     const url = alarm && alarm.floorPlanUrl;
     const appearance = state.marker;
