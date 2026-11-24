@@ -4,6 +4,12 @@ public sealed record Alarm(string Point, string? FloorPlanUrl = null, string? De
 
 public static class AlarmDisplay
 {
+    public static string? ResolveTextOverride(string? entered, string? suggested)
+    {
+        string? text = entered?.Trim();
+        return string.IsNullOrEmpty(text) || text == suggested?.Trim() ? null : text;
+    }
+
     public static (Alarm? Alarm, PointPlan? Marker) SelectRegistered(
         IReadOnlyList<Alarm> activeAlarms, IReadOnlyList<PointPlan> plans)
     {

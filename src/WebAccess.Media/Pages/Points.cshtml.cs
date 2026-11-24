@@ -16,15 +16,22 @@ public sealed class PointsModel(
     public int Revision { get; private set; }
     [TempData] public string? Feedback { get; set; }
 
-    public async Task<IActionResult> OnGetTagsAsync()
+    public async Task<IActionResult> OnGetTagsAsync(string? point)
     {
         try
         {
+            if (point is not null && monitor.State.Alarms.FirstOrDefault(alarm => alarm.Point == point) is Alarm alarm &&
+                !string.IsNullOrWhiteSpace(alarm.Description))
+            {
+                return new JsonResult(new WebAccessTag(point, alarm.Description));
+            }
             if (connection.Current is not ConnectionSettings current)
             {
                 return new JsonResult(new { error = "請先儲存 WebAccess 連線設定。" }) { StatusCode = 409 };
             }
-            return new JsonResult(await client.GetTagsAsync(current, HttpContext.RequestAborted));
+            IReadOnlyList<WebAccessTag> tags = await client.GetTagsAsync(current, HttpContext.RequestAborted);
+            return point is null ? new JsonResult(tags)
+                : new JsonResult(tags.FirstOrDefault(tag => tag.Name == point) ?? new WebAccessTag(point, ""));
         }
         catch (Exception error) when (!HttpContext.RequestAborted.IsCancellationRequested &&
             (WebAccessClient.IsConnectionFailure(error) || error is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException))
@@ -137,7 +144,8 @@ public sealed class PointsModel(
     public async Task<IActionResult> OnPostSaveAsync(
         string? point, int x, int y, IFormFile? image, string? sharedFile, int revision, bool isNew,
         string icon = "dot", bool flash = false, bool imageOnly = false, IFormFile? customIcon = null,
-        string? alarmText = null, int alarmTextSize = PointPlan.DefaultAlarmTextSize, int iconSize = PointPlan.DefaultIconSize)
+        string? alarmText = null, int alarmTextSize = PointPlan.DefaultAlarmTextSize, int iconSize = PointPlan.DefaultIconSize,
+        string? suggestedAlarmText = null)
     {
         if (!ModelState.IsValid || string.IsNullOrWhiteSpace(point) || point.Length > 256 ||
             x is < 0 or > 100 || y is < 0 or > 100 ||
@@ -192,7 +200,7 @@ public sealed class PointsModel(
                 uploaded.Add(iconFile);
             }
             PointPlan updated = new(name, file, x, y, icon, flash, imageOnly, iconFile,
-                alarmText?.Trim(), alarmTextSize, iconSize);
+                AlarmDisplay.ResolveTextOverride(alarmText, suggestedAlarmText), alarmTextSize, iconSize);
             PointPlan[] plans = playlist.PointPlans ?? [];
             plans = previous is null ? [.. plans, updated] : plans.Select(plan => plan.Point == name ? updated : plan).ToArray();
             saved = storage.Save(playlist with { PointPlans = plans, FloorImages = floorImages });

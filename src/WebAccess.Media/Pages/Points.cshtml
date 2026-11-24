@@ -154,8 +154,10 @@
                     <label>或上傳新底圖 <input name="image" id="file" type="file" accept=".png,.jpg,.jpeg"></label>
                     <fieldset>
                         <legend>警報文字</legend>
+                        <input type="hidden" name="suggestedAlarmText" id="suggested-alarm-text">
                         <label>自訂文字
                             <textarea name="alarmText" id="alarm-text" rows="2" maxlength="500" placeholder="留空時使用 WebAccess 回傳的警報文字">@Model.Selected?.AlarmText</textarea>
+                            <small>預設帶入測點描述。修改後才會覆寫 API 警報文字。</small>
                         </label>
                         <label>文字大小（px）
                             <input name="alarmTextSize" id="alarm-text-size" type="number" required
@@ -239,6 +241,8 @@ const image = document.getElementById('image');
 const previewGroup = document.getElementById('alarm-preview-group');
 const previewText = document.getElementById('alarm-preview');
 const alarmText = document.getElementById('alarm-text');
+const suggestedText = document.getElementById('suggested-alarm-text');
+const point = document.getElementById('point-name');
 const alarmTextSize = document.getElementById('alarm-text-size');
 const iconSize = document.getElementById('icon-size');
 const marker = document.getElementById('marker');
@@ -262,6 +266,30 @@ function updateText() {
     previewText.style.fontSize = previewSize(alarmTextSize);
     previewText.hidden = imageOnly.checked;
 }
+function suggestText(description) {
+    if (alarmText.value !== suggestedText.value) return;
+    suggestedText.value = (description || '').trim().slice(0, alarmText.maxLength);
+    alarmText.value = suggestedText.value;
+    updateText();
+}
+async function loadSuggestedText() {
+    const name = point.value.trim();
+    if (!name || alarmText.value !== suggestedText.value) return;
+    try {
+        const response = await fetch('/engineering?handler=Tags&point=' + encodeURIComponent(name), { cache: 'no-store' });
+        if (!response.ok || point.value.trim() !== name) return;
+        const tag = await response.json();
+        if (point.value.trim() === name) suggestText(tag.description);
+    } catch {
+        // 讀取測點失敗時保留可手動輸入的文字。
+    }
+}
+if (previewText.dataset.apiText) suggestText(previewText.dataset.apiText);
+else if (point.readOnly) loadSuggestedText();
+point.addEventListener('change', () => {
+    suggestText('');
+    loadSuggestedText();
+});
 function updateIcon() {
     const icon = document.querySelector('input[name=icon]:checked').value;
     const isCustom = icon === 'custom';
@@ -340,7 +368,6 @@ if (loadTags) {
     const message = document.getElementById('tag-status');
     const results = document.getElementById('tag-results');
     const retry = document.getElementById('retry-tags');
-    const point = document.getElementById('point-name');
     const limit = 100;
     let tags = null;
     let loading = false;
@@ -361,6 +388,7 @@ if (loadTags) {
             button.append(name, description);
             button.addEventListener('click', () => {
                 point.value = tag.name;
+                suggestText(tag.description);
                 selected = true;
                 dialog.close();
             });
