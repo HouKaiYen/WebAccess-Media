@@ -65,7 +65,7 @@
                 <input form="upload-form" id="upload-media" type="file" name="media" accept=".png,.jpg,.jpeg,.gif,.mp4" hidden>
                 <button type="button" id="choose-media">＋ 新增媒體</button>
             </div>
-            <p class="file-note">支援 PNG、JPEG、GIF、MP4。圖片與 GIF 上限 20 MB，MP4 上限 100 MB。</p>
+            <p class="file-note">支援 PNG、JPEG、GIF、MP4。圖片與 GIF 上限 20 MB，MP4 上限 100 MB。移除項目並儲存後，會刪除未被使用的本機副本。</p>
             @if (Model.Items.Count == 0)
             {
                 <div class="empty"><strong>播放清單目前是空的</strong><span>新增媒體後，待機畫面會依序循環播放。</span></div>

@@ -126,8 +126,29 @@ public sealed class PlayerSettings(string directory)
         (IsEngineeringReference(Read(), file) ? FindMedia(_mediaDirectory, file) : null);
 
     private static bool IsEngineeringReference(Playlist playlist, string file) =>
-        (playlist.FloorImages?.Any(image => image.File == file) ?? false) ||
-        (playlist.PointPlans?.Any(plan => plan.File == file || plan.IconFile == file) ?? false);
+        (playlist.FloorImages?.Any(image => string.Equals(image.File, file, StringComparison.OrdinalIgnoreCase)) ?? false) ||
+        (playlist.PointPlans?.Any(plan => string.Equals(plan.File, file, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(plan.IconFile, file, StringComparison.OrdinalIgnoreCase)) ?? false);
+
+    public void RemoveUnusedMedia(string file, bool isEngineeringMedia = false)
+    {
+        lock (_gate)
+        {
+            Playlist playlist = Read();
+            if (IsEngineeringReference(playlist, file) ||
+                playlist.Items.Any(item => string.Equals(item.File, file, StringComparison.OrdinalIgnoreCase)))
+            {
+                return;
+            }
+
+            string? path = isEngineeringMedia ? FindMedia(_engineeringDirectory, file) : null;
+            path ??= FindMedia(_mediaDirectory, file);
+            if (path is not null)
+            {
+                File.Delete(path);
+            }
+        }
+    }
 
     private static string? FindMedia(string targetDirectory, string file)
     {

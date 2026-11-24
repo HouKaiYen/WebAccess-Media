@@ -97,13 +97,18 @@ public sealed class PointsModel(
 
     public IActionResult OnPostDeleteFloorImage(string? file, int revision)
     {
+        if (string.IsNullOrEmpty(file))
+        {
+            return LibraryError("找不到這張共用平面圖。", 404);
+        }
         Playlist playlist = storage.Read();
         if (playlist.Revision != revision)
         {
             return LibraryError("設定已更新，請重新整理頁面後再刪除。", 409);
         }
         string[] usingPoints = (playlist.PointPlans ?? [])
-            .Where(plan => plan.File == file || plan.IconFile == file)
+            .Where(plan => string.Equals(plan.File, file, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(plan.IconFile, file, StringComparison.OrdinalIgnoreCase))
             .Select(plan => plan.Point).ToArray();
         if (usingPoints.Length > 0)
         {
@@ -111,7 +116,7 @@ public sealed class PointsModel(
         }
         FloorImage[] images = playlist.FloorImages ?? [];
         FloorImage[] remaining = images.Where(image => image.File != file).ToArray();
-        if (file is null || remaining.Length == images.Length)
+        if (remaining.Length == images.Length)
         {
             return LibraryError("找不到這張共用平面圖。", 404);
         }
@@ -122,7 +127,7 @@ public sealed class PointsModel(
         }
         try
         {
-            storage.RemoveEngineeringMedia(file);
+            storage.RemoveUnusedMedia(file, isEngineeringMedia: true);
         }
         catch (IOException)
         {

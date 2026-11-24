@@ -73,10 +73,27 @@ public sealed class SettingsModel(PlayerSettings storage) : PageModel
             HashSet<string> removed = (remove ?? []).ToHashSet(StringComparer.Ordinal);
             PlaylistItem[] items = Items.Where(item => !removed.Contains(item.File))
                 .Select(item => new PlaylistItem(item.File, item.Name.Trim(), item.Seconds)).ToArray();
-            Feedback = storage.Save(playlist with
+            if (!storage.Save(playlist with
             {
                 Items = items, IsMuted = IsMuted, Marquee = Marquee?.Trim() ?? "", MarqueeAtTop = MarqueeAtTop
-            }) ? "已儲存待機設定。" : "設定已更新，請檢查最新清單再編輯。";
+            }))
+            {
+                Feedback = "設定已更新，請檢查最新清單再編輯。";
+                return RedirectToPage();
+            }
+
+            Feedback = "已儲存待機設定。";
+            foreach (string file in knownFiles.Where(removed.Contains))
+            {
+                try
+                {
+                    storage.RemoveUnusedMedia(file);
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                {
+                    Feedback = "已儲存待機設定，但部分已移除的媒體檔案無法刪除。";
+                }
+            }
         }
         return RedirectToPage();
     }
