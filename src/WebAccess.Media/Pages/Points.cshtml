@@ -37,7 +37,7 @@
     .floor-card { display: grid; gap: .35rem; padding: .35rem; overflow: hidden; }
     .floor-entry { display: grid; align-content: start; gap: .25rem; min-width: 0; }
     .floor-delete { justify-self: end; padding: .15rem .4rem; font-size: .8rem; color: #a42c3e; }
-    .floor-card img { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: var(--background); }
+    .floor-card img { width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: contain; background: var(--background); }
     .floor-card span { text-overflow: ellipsis; overflow: hidden; white-space: nowrap; font-size: .8rem; }
     .icon-option { display: flex; align-items: center; gap: .4rem; margin: 0; padding: .35rem; border: 1px solid var(--border); border-radius: .4rem; font-size: .85rem; }
     .icon-option:has(:checked) { border-color: var(--accent); background: var(--accent-soft); }
@@ -67,14 +67,14 @@
     .tag-picker::backdrop { background: #17243c66; }
     .tag-picker-header { display: flex; justify-content: space-between; align-items: start; gap: .75rem; }
     .tag-picker-header h2 { font-size: 1.1rem; }
-    .tag-results { display: grid; gap: .3rem; max-height: min(24rem, 50vh); overflow: auto; padding: .2rem; }
+    .tag-results { display: grid; gap: .3rem; max-height: min(24rem, 50vh); overflow: auto; overscroll-behavior: contain; padding: .2rem; }
     .tag-result { display: grid; gap: .1rem; text-align: left; overflow-wrap: anywhere; }
     .tag-result:hover, .tag-result:focus-visible { background: var(--accent-soft); }
     .workspace-title, .simulation-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .5rem; margin-bottom: .8rem; }
     .workspace-title h1, .simulation-toolbar h2 { margin: 0; }
     .simulation-dialog { width: min(68rem, calc(100vw - 2rem)); max-height: 92vh; padding: 1rem; border: 1px solid var(--border); color: var(--text); }
     .simulation-dialog::backdrop { background: #17243c80; }
-    .simulation-stage { display: grid; justify-items: center; gap: .8rem; padding: 1rem; border-radius: .5rem; background: #101923; color: #fff; text-align: center; }
+    .simulation-stage { display: grid; justify-items: center; align-content: center; min-height: 64vh; gap: .8rem; padding: 1rem; border-radius: .5rem; background: #101923; color: #fff; text-align: center; }
     .simulation-stage h3 { margin: 0; max-width: 100%; line-height: 1.2; overflow-wrap: anywhere; white-space: pre-wrap; }
     .simulation-stage .plan { cursor: default; }
     .simulation-stage .plan > img { max-height: 58vh; margin: auto; }
@@ -116,14 +116,14 @@
             {
                 <div class="floor-entry">
                     <button class="floor-card" type="button" data-floor="@floor.File" title="@floor.Name">
-                        <img src="/engineering-media/@floor.File" alt="" loading="lazy"><span>@floor.Name</span>
+                        <img src="/engineering-media/@floor.File" alt="" width="120" height="90" loading="lazy"><span>@floor.Name</span>
                     </button>
                     <button class="floor-delete" type="button" data-delete="@floor.File" aria-label="刪除 @floor.Name">刪除</button>
                 </div>
             }
         </div>
     </aside>
-    <main>
+    <main id="main-content" tabindex="-1">
         <div class="workspace-title">
             <h1>@(Model.Selected?.Point ?? "新增測點頁面")</h1>
             <button id="open-simulation" type="button" aria-haspopup="dialog" disabled="@(Model.Selected is null)">模擬警報預覽</button>
@@ -140,7 +140,7 @@
                 <div class="plan" id="plan">
                     @if (Model.Selected is WebAccess.Media.PointPlan selected)
                     {
-                        <img id="image" src="/engineering-media/@selected.File" alt="測點平面圖">
+                        <img id="image" src="/engineering-media/@selected.File" alt="測點平面圖" fetchpriority="high">
                     }
                     else
                     {
@@ -218,7 +218,9 @@
                 </form>
                 @if (Model.Selected is WebAccess.Media.PointPlan current)
                 {
-                    <form class="remove" method="post" asp-page-handler="Remove"><button name="point" value="@current.Point">移除測點頁面</button></form>
+                    <form class="remove" method="post" asp-page-handler="Remove" data-remove-point="@current.Point">
+                        <button name="point" value="@current.Point">移除測點頁面</button>
+                    </form>
                 }
             </div>
         </div>
@@ -236,7 +238,7 @@
 </dialog>
 <template id="floor-entry">
     <div class="floor-entry">
-        <button class="floor-card" type="button"><img alt="" loading="lazy"><span></span></button>
+        <button class="floor-card" type="button"><img alt="" width="120" height="90" loading="lazy"><span></span></button>
         <button class="floor-delete" type="button">刪除</button>
     </div>
 </template>
@@ -256,9 +258,22 @@
     </dialog>
 }
 <script>
-document.getElementById('point-list').addEventListener('submit', event => {
+document.querySelector('.workspace').addEventListener('submit', event => {
     const pointName = event.target.dataset.removePoint;
     if (pointName && !window.confirm('確定要刪除測點「' + pointName + '」？')) event.preventDefault();
+});
+const pointForm = document.getElementById('point-form');
+let pointDirty = false;
+function markPointDirty() {
+    pointDirty = true;
+}
+pointForm.addEventListener('input', markPointDirty);
+pointForm.addEventListener('change', markPointDirty);
+pointForm.addEventListener('submit', () => { pointDirty = false; });
+window.addEventListener('beforeunload', event => {
+    if (!pointDirty) return;
+    event.preventDefault();
+    event.returnValue = '';
 });
 const image = document.getElementById('image');
 const previewGroup = document.getElementById('alarm-preview-group');
@@ -375,6 +390,7 @@ function locate(event) {
     x.value = Math.max(0, Math.min(100, Math.round(100 * (event.clientX - bounds.left) / bounds.width)));
     y.value = Math.max(0, Math.min(100, Math.round(100 * (event.clientY - bounds.top) / bounds.height)));
     updateMarker();
+    markPointDirty();
 }
 image.addEventListener('click', locate);
 marker.addEventListener('pointerdown', event => {
@@ -411,6 +427,7 @@ if (loadTags) {
             button.append(name, description);
             button.addEventListener('click', () => {
                 point.value = tag.name;
+                markPointDirty();
                 suggestText(tag.description);
                 selected = true;
                 dialog.close();
@@ -550,6 +567,7 @@ grid.addEventListener('click', event => {
         sharedFile.value = card.dataset.floor;
         fileInput.value = '';
         updatePlan();
+        markPointDirty();
         return;
     }
     const remove = event.target.closest('[data-delete]');

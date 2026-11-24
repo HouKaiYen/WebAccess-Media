@@ -23,3 +23,6 @@
 .alarm-icon img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .alarm-icon[data-flash="true"] { animation: alarm-flash 1s steps(1, end) infinite; }
 @keyframes alarm-flash { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) {
+    .alarm-icon[data-flash="true"] { animation: none; }
+}

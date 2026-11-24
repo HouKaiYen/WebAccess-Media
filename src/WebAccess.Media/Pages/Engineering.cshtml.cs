@@ -43,6 +43,10 @@ public sealed class EngineeringModel(EngineeringSettings settings) : PageModel
         Input.Password = null;
         ModelState.Remove("Input.Password");
         string? apiBase = WebAccessAddress.FromIp(Input.Ip ?? "");
+        if (apiBase is null && !string.IsNullOrWhiteSpace(Input.Ip))
+        {
+            ModelState.AddModelError("Input.Ip", "請輸入有效的 IPv4 或 IPv6 位址，例如 192.168.1.100。");
+        }
         if (!ModelState.IsValid || apiBase is null)
         {
             Feedback = "請輸入有效的 IP 位址、專案名稱及帳號。";
@@ -93,9 +97,12 @@ public sealed class EngineeringModel(EngineeringSettings settings) : PageModel
 
     public sealed class ConnectionForm
     {
-        [Required, StringLength(64)] public string Ip { get; set; } = "";
-        [Required, StringLength(256)] public string Project { get; set; } = "";
-        [Required, StringLength(256)] public string Username { get; set; } = "";
+        [Required(ErrorMessage = "請輸入 IP 位址。"), StringLength(64, ErrorMessage = "IP 位址最多 64 個字元。")]
+        public string Ip { get; set; } = "";
+        [Required(ErrorMessage = "請輸入專案名稱。"), StringLength(256, ErrorMessage = "專案名稱最多 256 個字元。")]
+        public string Project { get; set; } = "";
+        [Required(ErrorMessage = "請輸入帳號。"), StringLength(256, ErrorMessage = "帳號最多 256 個字元。")]
+        public string Username { get; set; } = "";
         public string? Password { get; set; }
     }
 }
