@@ -1,3 +1,6 @@
+.alarm-frame { border-radius: .75rem; box-shadow: 0 0 0 3px #d91e30; }
+.alarm-frame > img { border-radius: inherit; }
+
 .alarm-icon {
     display: inline-grid;
     place-items: center;

@@ -57,6 +57,16 @@
     .tag-results { display: grid; gap: .3rem; max-height: min(24rem, 50vh); overflow: auto; padding: .2rem; }
     .tag-result { display: grid; gap: .1rem; text-align: left; overflow-wrap: anywhere; }
     .tag-result:hover, .tag-result:focus-visible { background: var(--accent-soft); }
+    .workspace-title, .simulation-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .5rem; margin-bottom: .8rem; }
+    .workspace-title h1, .simulation-toolbar h2 { margin: 0; }
+    .simulation-dialog { width: min(68rem, calc(100vw - 2rem)); max-height: 92vh; padding: 1rem; border: 1px solid var(--border); color: var(--text); }
+    .simulation-dialog::backdrop { background: #17243c80; }
+    .simulation-stage { display: grid; justify-items: center; gap: .8rem; padding: 1rem; border-radius: .5rem; background: #101923; color: #fff; text-align: center; }
+    .simulation-stage h3 { margin: 0; max-width: 100%; line-height: 1.2; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .simulation-stage .plan { cursor: default; }
+    .simulation-stage .plan > img { max-height: 58vh; margin: auto; }
+    .simulation-stage.image-only .plan { width: 100%; }
+    .simulation-stage.image-only .plan > img { width: 100%; height: 64vh; max-height: none; object-fit: contain; }
 </style>
 }
 
@@ -94,7 +104,10 @@
         </div>
     </aside>
     <main>
-        <h1>@(Model.Selected?.Point ?? "新增測點頁面")</h1>
+        <div class="workspace-title">
+            <h1>@(Model.Selected?.Point ?? "新增測點頁面")</h1>
+            <button id="open-simulation" type="button" aria-haspopup="dialog" disabled="@(Model.Selected is null)">模擬警報預覽</button>
+        </div>
         @if (Model.Feedback is string feedback)
         {
             <p class="feedback" role="status">@feedback</p>
@@ -190,6 +203,16 @@
         </div>
     </main>
 </div>
+<dialog class="simulation-dialog card" id="alarm-simulation" aria-labelledby="simulation-heading">
+    <form method="dialog" class="simulation-toolbar">
+        <h2 id="simulation-heading">模擬警報預覽</h2>
+        <button>關閉</button>
+    </form>
+    <div class="simulation-stage" id="simulation-stage">
+        <h3 id="simulation-text"></h3>
+        <div class="plan" id="simulation-plan"><img id="simulation-image" alt="測點平面圖"></div>
+    </div>
+</dialog>
 <template id="floor-entry">
     <div class="floor-entry">
         <button class="floor-card" type="button"><img alt="" loading="lazy"><span></span></button>
@@ -219,6 +242,11 @@ const alarmText = document.getElementById('alarm-text');
 const alarmTextSize = document.getElementById('alarm-text-size');
 const iconSize = document.getElementById('icon-size');
 const marker = document.getElementById('marker');
+const planFrame = document.getElementById('plan');
+const openSimulation = document.getElementById('open-simulation');
+const simulation = document.getElementById('alarm-simulation');
+const simulationPlan = document.getElementById('simulation-plan');
+const simulationImage = document.getElementById('simulation-image');
 const markerImage = document.getElementById('marker-image');
 const customIcon = document.getElementById('custom-icon');
 const imageOnly = document.getElementById('image-only');
@@ -241,6 +269,7 @@ function updateIcon() {
     marker.dataset.flash = document.getElementById('flash').checked;
     marker.style.setProperty('--icon-size', previewSize(iconSize));
     marker.hidden = imageOnly.checked;
+    planFrame.classList.toggle('alarm-frame', !marker.hidden);
     updateText();
     document.getElementById('custom-icon-field').hidden = !isCustom;
     customIcon.disabled = !isCustom;
@@ -261,6 +290,28 @@ customIcon.addEventListener('change', () => {
     updateIcon();
 });
 updateIcon();
+openSimulation.addEventListener('click', () => {
+    const source = image.getAttribute('src');
+    if (!source) return;
+    const text = document.getElementById('simulation-text');
+    text.textContent = previewText.textContent;
+    text.style.fontSize = previewText.style.fontSize;
+    text.hidden = imageOnly.checked;
+    document.getElementById('simulation-stage').classList.toggle('image-only', imageOnly.checked);
+    simulationPlan.classList.toggle('alarm-frame', !marker.hidden);
+    simulationImage.src = source;
+    if (!marker.hidden) {
+        const icon = marker.cloneNode(true);
+        icon.removeAttribute('id');
+        icon.querySelector('img').removeAttribute('id');
+        simulationPlan.append(icon);
+    }
+    simulation.showModal();
+});
+simulation.addEventListener('close', () => {
+    simulationImage.removeAttribute('src');
+    simulationPlan.querySelector('.marker')?.remove();
+});
 function updateMarker() {
     marker.style.left = x.value + '%';
     marker.style.top = y.value + '%';
@@ -379,6 +430,7 @@ function updatePlan() {
     if (source) image.src = source;
     else image.removeAttribute('src');
     previewGroup.hidden = !source;
+    openSimulation.disabled = !source;
     document.getElementById('empty-plan').hidden = !!source;
 }
 fileInput.addEventListener('change', updatePlan);
