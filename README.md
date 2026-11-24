@@ -64,7 +64,7 @@ BrightSign 開啟 `http://<Windows 主機 IP>:3008/display`。若需新增防火
 
 ## 更新與備份
 
-預設媒體位置在 `%LOCALAPPDATA%\WebAccess-Media`。工程底圖和告警圖示存於 `engineering-media`，日常輪播媒體存於 `media`。上傳時程式會複製檔案到對應目錄，播放器透過 WebAccess Media 的 HTTP 網址讀取。刪除測點頁面會解除測點設定，圖庫中的底圖可繼續供其他測點使用。
+預設媒體位置在 `%LOCALAPPDATA%\WebAccess-Media`。工程底圖和告警圖示存於 `engineering-media`，日常輪播媒體存於 `media`。上傳時程式會複製檔案到對應目錄，播放器透過 WebAccess Media 的 HTTP 網址讀取。從日常輪播移除項目並儲存，或從共用圖庫確認刪除時，程式會刪除未被引用的副本。刪除測點頁面時，底圖仍留在圖庫。
 
 預設設定目錄為 `%LOCALAPPDATA%\WebAccess-Media`。Windows 以目前使用者的 DPAPI 保護加密金鑰。備份時請保留完整目錄，還原後使用原電腦及原 Windows 帳號啟動。換電腦或換帳號時，請重新輸入連線資料。更新前先停止程式，再替換已解壓縮的程式檔案。若另外建立了 `appsettings.json`，更新前也請備份。
 
