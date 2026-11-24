@@ -39,6 +39,13 @@
     @@media (max-width: 560px) { .workspace { grid-template-columns: 1fr; } aside { border-right: 0; border-bottom: 1px solid var(--line); } .canvas { min-height: 240px; } }
 
     input { width: 100%; }
+    .tag-picker { width: min(34rem, calc(100vw - 2rem)); max-height: 90vh; padding: 1rem; border: 1px solid var(--border); color: var(--text); }
+    .tag-picker::backdrop { background: #17243c66; }
+    .tag-picker-header { display: flex; justify-content: space-between; align-items: start; gap: .75rem; }
+    .tag-picker-header h2 { font-size: 1.1rem; }
+    .tag-results { display: grid; gap: .3rem; max-height: min(24rem, 50vh); overflow: auto; padding: .2rem; }
+    .tag-result { display: grid; gap: .1rem; text-align: left; overflow-wrap: anywhere; }
+    .tag-result:hover, .tag-result:focus-visible { background: var(--accent-soft); }
 </style>
 }
 
@@ -104,12 +111,10 @@
                 <form method="post" asp-page-handler="Save" enctype="multipart/form-data">
                     <input name="revision" type="hidden" value="@Model.Revision">
                     <input name="isNew" type="hidden" value="@(Model.Selected is null ? "true" : "false")">
-                    <label>測點 Name <input name="point" list="webaccess-tags" value="@Model.Selected?.Point" required maxlength="256" readonly="@(Model.Selected is not null)"></label>
+                    <label>測點 Name <input id="point-name" name="point" value="@Model.Selected?.Point" required maxlength="256" readonly="@(Model.Selected is not null)"></label>
                     @if (Model.Selected is null)
                     {
-                        <datalist id="webaccess-tags"></datalist>
-                        <p><button type="button" id="load-tags">讀取 WebAccess 測點</button></p>
-                        <p class="muted" id="tag-status" role="status"></p>
+                        <p><button type="button" id="load-tags" aria-haspopup="dialog">從 WebAccess 選取測點</button></p>
                     }
                     <label>共用底圖
                         <select name="sharedFile" id="shared-file">
@@ -172,6 +177,21 @@
         </div>
     </main>
 </div>
+@if (Model.Selected is null)
+{
+    <dialog class="tag-picker card" id="tag-picker" aria-labelledby="tag-picker-title">
+        <div class="tag-picker-header">
+            <h2 id="tag-picker-title">選取 WebAccess 測點</h2>
+            <form method="dialog"><button>關閉</button></form>
+        </div>
+        <label>搜尋測點
+            <input id="tag-search" type="search" placeholder="輸入 Name 或描述" autocomplete="off" autofocus>
+        </label>
+        <p class="muted" id="tag-status" role="status"></p>
+        <button type="button" id="retry-tags" hidden>重新讀取</button>
+        <div class="tag-results" id="tag-results" role="group" aria-label="搜尋結果"></div>
+    </dialog>
+}
 <script>
 const image = document.getElementById('image');
 const previewGroup = document.getElementById('alarm-preview-group');
@@ -245,22 +265,87 @@ marker.addEventListener('pointermove', event => {
 });
 const loadTags = document.getElementById('load-tags');
 if (loadTags) {
-    loadTags.addEventListener('click', async () => {
-        const message = document.getElementById('tag-status');
-        const list = document.getElementById('webaccess-tags');
-        loadTags.disabled = true;
+    const dialog = document.getElementById('tag-picker');
+    const search = document.getElementById('tag-search');
+    const message = document.getElementById('tag-status');
+    const results = document.getElementById('tag-results');
+    const retry = document.getElementById('retry-tags');
+    const point = document.getElementById('point-name');
+    const limit = 100;
+    let tags = null;
+    let loading = false;
+    let selected = false;
+    function renderTags() {
+        if (!tags) return;
+        const words = search.value.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+        const matches = tags.filter(tag => words.every(word => tag.searchText.includes(word)));
+        results.replaceChildren();
+        for (const tag of matches.slice(0, limit)) {
+            const button = document.createElement('button');
+            const name = document.createElement('strong');
+            const description = document.createElement('small');
+            button.type = 'button';
+            button.className = 'tag-result';
+            name.textContent = tag.name;
+            description.textContent = tag.description;
+            button.append(name, description);
+            button.addEventListener('click', () => {
+                point.value = tag.name;
+                selected = true;
+                dialog.close();
+            });
+            results.append(button);
+        }
+        message.textContent = !tags.length ? 'WebAccess 目前沒有測點。'
+            : !matches.length ? '沒有符合的測點。請更換關鍵字，或關閉後手動輸入。'
+            : matches.length > limit ? `找到 ${matches.length} 筆，顯示前 ${limit} 筆。可加入關鍵字縮小範圍。`
+            : `找到 ${matches.length} 筆測點。`;
+    }
+    async function fetchTags() {
+        if (loading) return;
+        loading = true;
+        retry.hidden = true;
+        results.replaceChildren();
         message.textContent = '正在讀取測點…';
         try {
             const response = await fetch('/engineering?handler=Tags', { cache: 'no-store' });
             const data = await response.json();
             if (!response.ok) throw new Error(data.error);
-            list.replaceChildren(...data.map(tag => new Option(tag.description, tag.name)));
-            message.textContent = data.length ? '已載入，可在名稱欄位輸入關鍵字選取。' : 'WebAccess 目前沒有測點。';
-            document.querySelector('input[name=point]').focus();
+            tags = data.map(tag => ({ ...tag, searchText: (tag.name + ' ' + tag.description).toLocaleLowerCase() }));
+            renderTags();
         } catch (error) {
             message.textContent = error.message || '無法讀取測點，請手動輸入。';
+            retry.hidden = false;
         } finally {
-            loadTags.disabled = false;
+            loading = false;
+        }
+    }
+    loadTags.addEventListener('click', () => {
+        selected = false;
+        search.value = '';
+        dialog.showModal();
+        if (tags) renderTags();
+        else fetchTags();
+    });
+    dialog.addEventListener('close', () => {
+        if (selected) point.focus();
+    });
+    retry.addEventListener('click', () => {
+        search.focus();
+        fetchTags();
+    });
+    search.addEventListener('input', renderTags);
+    dialog.addEventListener('keydown', event => {
+        if (event.isComposing || event.keyCode === 229) return;
+        const first = results.firstElementChild;
+        if (event.target === search && first && (event.key === 'ArrowDown' || event.key === 'Enter')) {
+            event.preventDefault();
+            if (event.key === 'Enter') first.click();
+            else first.focus();
+        } else if (results.contains(event.target) && ['ArrowUp', 'ArrowDown'].includes(event.key)) {
+            event.preventDefault();
+            const next = event.key === 'ArrowDown' ? event.target.nextElementSibling : event.target.previousElementSibling || search;
+            next?.focus();
         }
     });
 }
