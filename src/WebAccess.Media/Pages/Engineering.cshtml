@@ -5,13 +5,12 @@
 
 @section Styles {
 <style>
-        form { display: grid; gap: .9rem; background: #182633; border: 1px solid #334858; border-radius: .6rem; padding: 1.5rem; }
+        form { display: grid; gap: .9rem; padding: 1.5rem; }
         label { display: grid; gap: .3rem; }
-        small { color: #c2d2df; }
         .actions { display: flex; flex-wrap: wrap; gap: .65rem; margin-top: .45rem; }
-        .feedback { border-left: 4px solid; padding: .6rem .9rem; background: #182633; }
-        .success { color: #9de6bd; }
-        .error { color: #ffc47a; }
+        .feedback { border-left: 4px solid; padding: .6rem .9rem; background: var(--panel); }
+        .success { color: #197451; }
+        .error { color: #ab323b; }
 
         main { max-width: 720px; margin: auto; padding: 1.25rem; }
         input { width: 100%; }
@@ -24,7 +23,7 @@
     {
         <p class="feedback @(Model.IsSuccessful ? "success" : "error")" role="status">@feedback</p>
     }
-    <form method="post" asp-page-handler="Save">
+    <form class="card" method="post" asp-page-handler="Save">
         <label>WebAccess IP 位址
             <input asp-for="Input.Ip" required placeholder="192.168.1.100" spellcheck="false">
             <small>程式會自動使用 HTTP 並加上 /WaWebService/Json。</small>

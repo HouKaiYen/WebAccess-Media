@@ -8,21 +8,35 @@
         .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
         .toolbar h2 { margin-right: auto; }
         nav, .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
-        section, .upload { background: #182633; border: 1px solid #334858; border-radius: .6rem; padding: 1.2rem; margin-bottom: 1rem; }
-        .row { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; padding: .75rem 0; border-top: 1px solid #334858; }
+        section { padding: 1.25rem 1.4rem; margin-bottom: 1rem; }
+        .intro { margin: .25rem 0 1.4rem; }
+        .intro > div, .section-heading > div { margin-right: auto; }
+        .section-heading { align-items: flex-end; }
+        .intro h1 { margin: 0; font-size: 1.5rem; }
+        .intro p, .section-heading p { margin: .25rem 0 0; color: var(--muted); }
+        .section-heading h2, .options h2 { margin: 0; font-size: 1rem; }
+        .count { border-radius: 1rem; padding: .1rem .45rem; background: var(--accent-soft); color: var(--accent); font-size: .8rem; }
+        .file-note { border-radius: .4rem; padding: .55rem .75rem; background: #f4f6fa; color: var(--muted); }
+        .empty { min-height: 155px; display: grid; place-content: center; gap: .35rem; text-align: center; color: var(--muted); }
+        .empty strong { color: var(--text); }
+        .row { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; padding: .75rem 0; border-top: 1px solid var(--line); }
         label { display: inline-flex; align-items: center; gap: .5rem; }
         input[type=number] { width: 5.5rem; }
         textarea { width: 100%; margin: .5rem 0; }
         .thumb { width: 76px; height: 48px; object-fit: contain; }
         [hidden] { display: none !important; }
-        .options { display: grid; grid-template-columns: minmax(180px, 1fr) 2fr; gap: 1rem; }
-        .muted { color: #b7c9d7; }
-        dialog { width: min(92vw, 880px); background: #111b26; color: inherit; border: 1px solid #4a6376; border-radius: .6rem; padding: 1rem; }
+        .options { display: grid; grid-template-columns: minmax(180px, .85fr) minmax(0, 1.15fr); align-items: start; gap: 1rem; }
+        .options h2 { margin-bottom: .75rem; }
+        .switch input { appearance: none; width: 2.1rem; height: 1.16rem; padding: 0; border: 0; border-radius: 2rem; background: #cdd6e5; cursor: pointer; }
+        .switch input::before { display: block; width: .83rem; height: .83rem; margin: .165rem; border-radius: 50%; background: #fff; content: ""; }
+        .switch input:checked { background: var(--accent); }
+        .switch input:checked::before { transform: translateX(.95rem); }
+        dialog { width: min(92vw, 880px); background: var(--panel); color: inherit; border: 1px solid var(--border); border-radius: .6rem; padding: 1rem; }
         dialog::backdrop { background: #060b13cc; }
         .preview { position: relative; height: min(55vh, 480px); display: grid; place-items: center; background: #05090e; overflow: hidden; }
         .preview img, .preview video { max-width: 100%; max-height: 100%; }
         #preview-media { display: grid; place-items: center; width: 100%; height: 100%; overflow: hidden; }
-        #preview-marquee { position: absolute; inset-inline: 0; bottom: 0; background: #0d151edb; white-space: nowrap; overflow: hidden; }
+        #preview-marquee { position: absolute; inset-inline: 0; bottom: 0; background: #0d151edb; color: #fff; white-space: nowrap; overflow: hidden; }
         #preview-marquee.top { top: 0; bottom: auto; }
         #preview-marquee span { display: inline-block; padding-left: 100%; animation: preview-scroll 12s linear infinite; }
         @@keyframes preview-scroll { to { transform: translateX(-100%); } }
@@ -33,23 +47,27 @@
 }
 @section Actions { <span id="draft-status" class="muted" role="status">已儲存</span><button type="submit" form="playlist-form" class="primary">儲存變更</button> }
 <main>
-    <div class="toolbar"><h2>待機播放內容</h2><button id="open-preview" type="button">預覽待機畫面</button></div>
+    <div class="intro toolbar">
+        <div><h1>管理待機播放內容</h1><p>新增圖片或影片，設定播放順序與圖片停留時間。</p></div>
+        <button id="open-preview" type="button">▷ 預覽待機畫面</button>
+    </div>
     @if (Model.Feedback is string feedback)
     {
         <p class="feedback" role="status">@feedback</p>
     }
-    <form class="upload toolbar" method="post" asp-page-handler="Upload" enctype="multipart/form-data">
-        <label>新增媒體 <input type="file" name="media" accept=".png,.jpg,.jpeg,.gif,.mp4" required></label>
-        <button type="submit">上傳並加入</button>
-        <small>圖片與 GIF 上限 20 MB，MP4 上限 100 MB。</small>
-    </form>
+    <form id="upload-form" method="post" asp-page-handler="Upload" enctype="multipart/form-data"></form>
     <form method="post" asp-page-handler="Save" id="playlist-form">
         <input type="hidden" asp-for="Revision">
-        <section>
-            <div class="toolbar"><h2>播放清單</h2></div>
+        <section class="card">
+            <div class="section-heading toolbar">
+                <div><h2>播放清單 <span class="count">@Model.Items.Count</span></h2><p>圖片依序循環播放，影片播完後切換。</p></div>
+                <input form="upload-form" id="upload-media" type="file" name="media" accept=".png,.jpg,.jpeg,.gif,.mp4" hidden>
+                <button type="button" id="choose-media">＋ 新增媒體</button>
+            </div>
+            <p class="file-note">支援 PNG、JPEG、GIF、MP4。圖片與 GIF 上限 20 MB，MP4 上限 100 MB。</p>
             @if (Model.Items.Count == 0)
             {
-                <p>播放清單目前是空的。</p>
+                <div class="empty"><strong>播放清單目前是空的</strong><span>新增媒體後，待機畫面會依序循環播放。</span></div>
             }
             <div id="playlist">
                 @for (int index = 0; index < Model.Items.Count; index++)
@@ -82,8 +100,8 @@
                 }
             </div>
         </section>
-        <div class="options"><section><h2>影片聲音</h2><label><input asp-for="IsMuted">靜音播放</label></section>
-        <section>
+        <div class="options"><section class="card"><h2>影片聲音</h2><label class="switch"><input asp-for="IsMuted">靜音播放</label></section>
+        <section class="card">
             <h2>跑馬燈</h2>
             <label for="Marquee">公告文字（留空停用）</label>
             <textarea asp-for="Marquee" rows="3" maxlength="500"></textarea>
@@ -99,6 +117,11 @@
 const playlistForm = document.getElementById('playlist-form');
 const list = document.getElementById('playlist');
 let dirty = false;
+const upload = document.getElementById('upload-media');
+document.getElementById('choose-media').addEventListener('click', () => upload.click());
+upload.addEventListener('change', () => {
+    if (upload.files.length) document.getElementById('upload-form').requestSubmit();
+});
 function markDirty() {
     dirty = true;
     document.getElementById('draft-status').textContent = '有未儲存變更';
