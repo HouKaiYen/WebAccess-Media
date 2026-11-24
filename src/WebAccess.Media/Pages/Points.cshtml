@@ -9,6 +9,10 @@
     int initialY = Model.Selected?.Y ?? defaultCoordinate;
 }
 
+@section Actions {
+    <button id="save-point" class="primary" type="submit" form="point-form">儲存設定</button>
+}
+
 @section Styles {
 <link rel="stylesheet" href="/alarm-icons.css">
 <style>
@@ -140,7 +144,7 @@
             </div>
             <div class="inspector card" role="region" aria-labelledby="inspector-title" tabindex="0">
                 <h2 id="inspector-title">測點與告警位置</h2>
-                <form method="post" asp-page-handler="Save" enctype="multipart/form-data">
+                <form id="point-form" method="post" asp-page-handler="Save" enctype="multipart/form-data">
                     <input id="point-revision" name="revision" type="hidden" value="@Model.Revision">
                     <input name="isNew" type="hidden" value="@(Model.Selected is null ? "true" : "false")">
                     <label>測點 Name <input id="point-name" name="point" value="@Model.Selected?.Point" required maxlength="256" readonly="@(Model.Selected is not null)"></label>
@@ -201,7 +205,6 @@
                         <label class="check"><input type="checkbox" name="flash" id="flash" value="true" checked="@(Model.Selected?.Flash ?? true)">閃爍警報圖示</label>
                         <label class="check"><input type="checkbox" name="imageOnly" id="image-only" value="true" checked="@(Model.Selected?.ImageOnly ?? false)">全頁只顯示圖片</label>
                     </fieldset>
-                    <button id="save-point" class="primary" type="submit">儲存設定</button>
                 </form>
                 @if (Model.Selected is WebAccess.Media.PointPlan current)
                 {

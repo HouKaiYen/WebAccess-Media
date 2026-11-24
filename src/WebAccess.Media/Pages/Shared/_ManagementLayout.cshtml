@@ -16,8 +16,15 @@
             <a href="/engineering" aria-current="@(Context.Request.Path == "/engineering" ? "page" : null)">工程設定</a>
             <a href="/engineering/connection" aria-current="@(Context.Request.Path == "/engineering/connection" ? "page" : null)">WebAccess 連線</a>
             <a href="/display">顯示頁</a>
-            @await RenderSectionAsync("Actions", required: false)
         </nav>
+        @if (IsSectionDefined("Actions"))
+        {
+            <div class="management-actions">
+                <div class="management-actions-inner">
+                    @await RenderSectionAsync("Actions")
+                </div>
+            </div>
+        }
     </header>
     @RenderBody()
 </body>
