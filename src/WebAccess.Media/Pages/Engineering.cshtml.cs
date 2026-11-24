@@ -69,7 +69,7 @@ public sealed class EngineeringModel(EngineeringSettings settings) : PageModel
             else
             {
                 await settings.TestAsync(connection, HttpContext.RequestAborted);
-                Feedback = "連線測試成功。請按「儲存並開始監控」套用設定。";
+                Feedback = "連線測試成功。請按右上方「儲存設定」套用設定。";
             }
             IsSuccessful = true;
         }

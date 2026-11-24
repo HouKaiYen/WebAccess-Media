@@ -18,10 +18,10 @@ public sealed class AlarmAppearanceSteps : IDisposable
     public void GivenLegacyPlan() =>
         _plan = JsonSerializer.Deserialize<PointPlan>("""{"Point":"A","File":"a.png","X":25,"Y":75}""");
 
-    [Then("預設顯示閃爍圓點且純圖片模式關閉")]
+    [Then("預設顯示閃爍 SOS 圓牌且純圖片模式關閉")]
     public void ThenDefaults()
     {
-        Assert.That(_plan?.Icon, Is.EqualTo("dot"));
+        Assert.That(_plan?.Icon, Is.EqualTo("sos"));
         Assert.That(_plan?.Flash, Is.True);
         Assert.That(_plan?.ImageOnly, Is.False);
         Assert.That(_plan?.AlarmTextSize, Is.EqualTo(PointPlan.DefaultAlarmTextSize));

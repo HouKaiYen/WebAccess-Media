@@ -143,7 +143,7 @@ public sealed class PointsModel(
 
     public async Task<IActionResult> OnPostSaveAsync(
         string? point, int x, int y, IFormFile? image, string? sharedFile, int revision, bool isNew,
-        string icon = "dot", bool flash = false, bool imageOnly = false, IFormFile? customIcon = null,
+        string icon = PointPlan.DefaultIcon, bool flash = false, bool imageOnly = false, IFormFile? customIcon = null,
         string? alarmText = null, int alarmTextSize = PointPlan.DefaultAlarmTextSize, int iconSize = PointPlan.DefaultIconSize,
         string? suggestedAlarmText = null)
     {
