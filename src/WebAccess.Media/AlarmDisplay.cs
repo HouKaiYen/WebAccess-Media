@@ -1,6 +1,6 @@
 namespace WebAccess.Media;
 
-public sealed record Alarm(string Point, string? FloorPlanUrl = null);
+public sealed record Alarm(string Point, string? FloorPlanUrl = null, string? Description = null);
 
 public sealed class AlarmDisplay
 {
