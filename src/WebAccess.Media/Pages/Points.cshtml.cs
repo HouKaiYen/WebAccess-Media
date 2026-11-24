@@ -161,33 +161,36 @@ public sealed class PointsModel(
         {
             return PointError("請輸入測點 Name，最多 256 個字元。", 400, point, isNew, "point");
         }
-        if (x is < 0 or > 100 || y is < 0 or > 100)
-        {
-            return PointError("座標必須介於 0% 與 100%。", 400, point, isNew, x is < 0 or > 100 ? "x" : "y");
-        }
-        if ((alarmText?.Length ?? 0) > 500)
-        {
-            return PointError("警報文字最多 500 個字元。", 400, point, isNew, "alarmText");
-        }
-        if (alarmTextSize is < PointPlan.MinAlarmTextSize or > PointPlan.MaxAlarmTextSize)
-        {
-            return PointError($"文字大小必須介於 {PointPlan.MinAlarmTextSize} 與 {PointPlan.MaxAlarmTextSize} px。", 400, point, isNew, "alarmTextSize");
-        }
-        if (iconSize is < PointPlan.MinIconSize or > PointPlan.MaxIconSize)
-        {
-            return PointError($"圖示大小必須介於 {PointPlan.MinIconSize} 與 {PointPlan.MaxIconSize} px。", 400, point, isNew, "iconSize");
-        }
-        if (!AlarmIcons.Any(option => option.Value == icon))
-        {
-            return PointError("請選擇圖示樣式。", 400, point, isNew, "icon");
-        }
         if (image is not null && !IsFloorImage(image))
         {
             return PointError("底圖限 PNG 或 JPEG。", 400, point, isNew, "image");
         }
-        if (customIcon is not null && !IsFloorImage(customIcon))
+        if (!imageOnly)
         {
-            return PointError("自訂圖示限 PNG 或 JPEG。", 400, point, isNew, "customIcon");
+            if (x is < 0 or > 100 || y is < 0 or > 100)
+            {
+                return PointError("座標必須介於 0% 與 100%。", 400, point, isNew, x is < 0 or > 100 ? "x" : "y");
+            }
+            if ((alarmText?.Length ?? 0) > 500)
+            {
+                return PointError("警報文字最多 500 個字元。", 400, point, isNew, "alarmText");
+            }
+            if (alarmTextSize is < PointPlan.MinAlarmTextSize or > PointPlan.MaxAlarmTextSize)
+            {
+                return PointError($"文字大小必須介於 {PointPlan.MinAlarmTextSize} 與 {PointPlan.MaxAlarmTextSize} px。", 400, point, isNew, "alarmTextSize");
+            }
+            if (iconSize is < PointPlan.MinIconSize or > PointPlan.MaxIconSize)
+            {
+                return PointError($"圖示大小必須介於 {PointPlan.MinIconSize} 與 {PointPlan.MaxIconSize} px。", 400, point, isNew, "iconSize");
+            }
+            if (!AlarmIcons.Any(option => option.Value == icon))
+            {
+                return PointError("請選擇圖示樣式。", 400, point, isNew, "icon");
+            }
+            if (customIcon is not null && !IsFloorImage(customIcon))
+            {
+                return PointError("自訂圖示限 PNG 或 JPEG。", 400, point, isNew, "customIcon");
+            }
         }
 
         Playlist playlist = storage.Read();
@@ -209,7 +212,7 @@ public sealed class PointsModel(
             return PointError("請選取共用平面圖或上傳一張圖片。", 400, name, isNew, "sharedFile");
         }
         string? iconFile = previous?.IconFile;
-        if (icon == "custom" && customIcon is null && iconFile is null)
+        if (!imageOnly && icon == "custom" && customIcon is null && iconFile is null)
         {
             return PointError("請上傳 PNG 或 JPEG 自訂圖示。", 400, name, isNew, "customIcon");
         }
@@ -228,14 +231,17 @@ public sealed class PointsModel(
                 uploaded.Add(file);
                 floorImages = [.. floorImages, new FloorImage(file, Path.GetFileName(image.FileName))];
             }
-            if (icon == "custom" && customIcon is not null)
+            if (!imageOnly && icon == "custom" && customIcon is not null)
             {
                 uploadingField = "customIcon";
                 iconFile = await storage.UploadEngineeringAsync(customIcon, HttpContext.RequestAborted);
                 uploaded.Add(iconFile);
             }
-            PointPlan updated = new(name, file, x, y, icon, flash, imageOnly, iconFile,
-                AlarmDisplay.ResolveTextOverride(alarmText, suggestedAlarmText), alarmTextSize, iconSize);
+            PointPlan updated = imageOnly
+                ? (previous ?? new PointPlan(name, file, PointPlan.DefaultCoordinate, PointPlan.DefaultCoordinate))
+                    with { File = file, ImageOnly = true }
+                : new PointPlan(name, file, x, y, icon, flash, false, iconFile,
+                    AlarmDisplay.ResolveTextOverride(alarmText, suggestedAlarmText), alarmTextSize, iconSize);
             PointPlan[] plans = playlist.PointPlans ?? [];
             plans = previous is null ? [.. plans, updated] : plans.Select(plan => plan.Point == name ? updated : plan).ToArray();
             saved = storage.Save(playlist with { PointPlans = plans, FloorImages = floorImages });
@@ -243,7 +249,7 @@ public sealed class PointsModel(
             {
                 return PointError("設定已在其他地方更新。請先確認最新內容。", 409, name, isNew);
             }
-            Feedback = "已儲存測點平面圖及告警圖示。";
+            Feedback = imageOnly ? "已儲存測點平面圖。" : "已儲存測點平面圖及告警圖示。";
         }
         catch (InvalidDataException error)
         {

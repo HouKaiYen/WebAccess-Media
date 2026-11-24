@@ -12,6 +12,7 @@ public sealed record PointPlan(string Point, string File, int X, int Y,
     string? AlarmText = null, int AlarmTextSize = PointPlan.DefaultAlarmTextSize, int IconSize = PointPlan.DefaultIconSize)
 {
     public const string DefaultIcon = "sos";
+    public const int DefaultCoordinate = 50;
     public const int DefaultAlarmTextSize = 48;
     public const int DefaultIconSize = 36;
     public const int MinAlarmTextSize = 16;
