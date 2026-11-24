@@ -36,7 +36,8 @@ WebApplication app = builder.Build();
 app.Use(async (context, next) =>
 {
     if (context.Request.Path.StartsWithSegments("/engineering", StringComparison.OrdinalIgnoreCase) ||
-        context.Request.Path.StartsWithSegments("/settings", StringComparison.OrdinalIgnoreCase))
+        context.Request.Path.StartsWithSegments("/settings", StringComparison.OrdinalIgnoreCase) ||
+        context.Request.Path.Equals("/api/status", StringComparison.OrdinalIgnoreCase))
     {
         IPAddress? remote = context.Connection.RemoteIpAddress;
         string host = context.Request.Host.Host.Trim('[', ']');
@@ -58,6 +59,8 @@ app.MapGet("/engineering/points", () => Results.Redirect("/engineering"));
 app.MapGet("/", () => Results.Redirect("/display"));
 app.MapGet("/display", () =>
     Results.File(Path.Combine(AppContext.BaseDirectory, "Display.html"), "text/html; charset=utf-8"));
+app.MapGet("/api/status", (WebAccessAlarmMonitor monitor) =>
+    Results.Ok(new { Application = "WebAccess.Media", monitor.State.ConnectionStatus }));
 app.MapGet("/api/display", (WebAccessAlarmMonitor monitor, PlayerSettings player) =>
 {
     WebAccessDisplayState state = monitor.State;
@@ -88,4 +91,8 @@ app.MapGet("/engineering-media/{file}", (string file, PlayerSettings player, Htt
         ? Results.File(path, PlayerSettings.MimeType(Path.GetExtension(file)))
         : Results.NotFound();
 });
+if (OperatingSystem.IsWindows() && app.Configuration.GetValue<bool>("Tray:Enabled"))
+{
+    app.Lifetime.ApplicationStarted.Register(() => WindowsTrayLauncher.Start(app));
+}
 app.Run();

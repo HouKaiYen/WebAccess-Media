@@ -1,4 +1,5 @@
 <Solution>
   <Project Path="src/WebAccess.Media/WebAccess.Media.csproj" />
+  <Project Path="src/WebAccess.Media.Tray/WebAccess.Media.Tray.csproj" />
   <Project Path="tests/WebAccess.Media.Bdd/WebAccess.Media.Bdd.csproj" />
 </Solution>
