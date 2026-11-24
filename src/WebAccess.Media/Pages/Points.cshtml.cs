@@ -4,12 +4,14 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 namespace WebAccess.Media.Pages;
 
 [RequestSizeLimit(102 * 1024 * 1024)]
-public sealed class PointsModel(PlayerSettings storage, EngineeringSettings connection, WebAccessClient client) : PageModel
+public sealed class PointsModel(
+    PlayerSettings storage, EngineeringSettings connection, WebAccessClient client, WebAccessAlarmMonitor monitor) : PageModel
 {
     public static IReadOnlyList<(string Value, string Label)> AlarmIcons { get; } =
         [("sos", "SOS 圓牌"), ("triangle", "警告三角"), ("dot", "色彩圓點"), ("button", "緊急押鈕"), ("custom", "自訂圖示")];
     public PointPlan[] Plans { get; private set; } = [];
     public PointPlan? Selected { get; private set; }
+    public string? CurrentAlarmText { get; private set; }
     public FloorImage[] FloorImages { get; private set; } = [];
     public int Revision { get; private set; }
     [TempData] public string? Feedback { get; set; }
@@ -38,6 +40,10 @@ public sealed class PointsModel(PlayerSettings storage, EngineeringSettings conn
         FloorImages = GetFloorImages(playlist);
         Revision = playlist.Revision;
         Selected = add ? null : Plans.FirstOrDefault(plan => plan.Point == selected) ?? Plans.FirstOrDefault();
+        if (Selected is PointPlan plan)
+        {
+            CurrentAlarmText = monitor.State.Alarms.FirstOrDefault(alarm => alarm.Point == plan.Point)?.Description;
+        }
     }
 
     public async Task<IActionResult> OnPostUploadFloorImagesAsync(List<IFormFile> images, string? selected)
@@ -80,14 +86,18 @@ public sealed class PointsModel(PlayerSettings storage, EngineeringSettings conn
 
     public async Task<IActionResult> OnPostSaveAsync(
         string? point, int x, int y, IFormFile? image, string? sharedFile, int revision, bool isNew,
-        string icon = "dot", bool flash = false, bool imageOnly = false, IFormFile? customIcon = null)
+        string icon = "dot", bool flash = false, bool imageOnly = false, IFormFile? customIcon = null,
+        string? alarmText = null, int alarmTextSize = PointPlan.DefaultAlarmTextSize, int iconSize = PointPlan.DefaultIconSize)
     {
         if (!ModelState.IsValid || string.IsNullOrWhiteSpace(point) || point.Length > 256 ||
             x is < 0 or > 100 || y is < 0 or > 100 ||
+            (alarmText?.Length ?? 0) > 500 ||
+            alarmTextSize is < PointPlan.MinAlarmTextSize or > PointPlan.MaxAlarmTextSize ||
+            iconSize is < PointPlan.MinIconSize or > PointPlan.MaxIconSize ||
             !AlarmIcons.Any(option => option.Value == icon) ||
             (image is not null && !IsFloorImage(image)) || (customIcon is not null && !IsFloorImage(customIcon)))
         {
-            Feedback = "請確認測點、座標與圖示設定，圖片限 PNG 或 JPEG。";
+            Feedback = "請確認測點、警報文字、字級、座標與圖示大小，圖片限 PNG 或 JPEG。";
             return RedirectToPage();
         }
 
@@ -131,7 +141,8 @@ public sealed class PointsModel(PlayerSettings storage, EngineeringSettings conn
                 iconFile = await storage.UploadEngineeringAsync(customIcon, HttpContext.RequestAborted);
                 uploaded.Add(iconFile);
             }
-            PointPlan updated = new(name, file, x, y, icon, flash, imageOnly, iconFile);
+            PointPlan updated = new(name, file, x, y, icon, flash, imageOnly, iconFile,
+                alarmText?.Trim(), alarmTextSize, iconSize);
             PointPlan[] plans = playlist.PointPlans ?? [];
             plans = previous is null ? [.. plans, updated] : plans.Select(plan => plan.Point == name ? updated : plan).ToArray();
             saved = storage.Save(playlist with { PointPlans = plans, FloorImages = floorImages });

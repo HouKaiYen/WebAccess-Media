@@ -67,7 +67,7 @@ app.MapGet("/api/display", (WebAccessAlarmMonitor monitor, PlayerSettings player
     {
         Alarm = alarm, Marker = marker is null ? null : new
         {
-            marker.X, marker.Y, marker.Icon, marker.Flash, marker.ImageOnly,
+            marker.X, marker.Y, marker.Icon, marker.Flash, marker.ImageOnly, marker.AlarmTextSize, marker.IconSize,
             IconUrl = marker.IconFile is string file ? $"/engineering-media/{file}" : null
         },
         state.ConnectionStatus, state.LastSuccessAt,

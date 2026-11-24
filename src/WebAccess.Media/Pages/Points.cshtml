@@ -18,6 +18,7 @@
     .canvas { min-height: clamp(350px, 65vh, 620px); display: grid; align-self: start; place-items: center; padding: 1.15rem; text-align: center; background: radial-gradient(circle, #d9e3f1 1px, transparent 1px) 0 0 / 18px 18px, var(--panel); }
     .plan { position: relative; display: inline-block; max-width: 100%; cursor: crosshair; }
     .plan img { max-width: 100%; max-height: 66vh; display: block; }
+    #alarm-preview { max-width: 100%; margin-bottom: .65rem; line-height: 1.2; overflow-wrap: anywhere; white-space: pre-wrap; }
     .marker { position: absolute; transform: translate(-50%, -50%); cursor: grab; touch-action: none; }
     .floor-grid, .icon-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; margin-bottom: .75rem; }
     .floor-card { display: grid; gap: .35rem; padding: .35rem; overflow: hidden; }
@@ -81,7 +82,9 @@
         <div class="editor">
             <div class="canvas card">
                 <p id="empty-plan" class="muted" hidden="@(Model.Selected is not null)">上傳平面圖後，點選圖面設定告警位置。</p>
-                <div class="plan" id="plan" hidden="@(Model.Selected is null)">
+                <div id="alarm-preview-group" hidden="@(Model.Selected is null)">
+                <h2 id="alarm-preview" data-api-text="@Model.CurrentAlarmText"></h2>
+                <div class="plan" id="plan">
                     @if (Model.Selected is WebAccess.Media.PointPlan selected)
                     {
                         <img id="image" src="/engineering-media/@selected.File" alt="測點平面圖">
@@ -93,6 +96,7 @@
                     <span class="marker alarm-icon" id="marker" data-icon="@(Model.Selected?.Icon ?? "dot")" style="left:@(Model.Selected?.X ?? 50)%;top:@(Model.Selected?.Y ?? 50)%">
                         <img id="marker-image" alt="" hidden>
                     </span>
+                </div>
                 </div>
             </div>
             <div class="inspector card">
@@ -117,12 +121,28 @@
                         </select>
                     </label>
                     <label>或上傳新底圖 <input name="image" id="file" type="file" accept=".png,.jpg,.jpeg"></label>
+                    <fieldset>
+                        <legend>警報文字</legend>
+                        <label>自訂文字
+                            <textarea name="alarmText" id="alarm-text" rows="2" maxlength="500" placeholder="留空時使用 WebAccess 回傳的警報文字">@Model.Selected?.AlarmText</textarea>
+                        </label>
+                        <label>文字大小（px）
+                            <input name="alarmTextSize" id="alarm-text-size" type="number" required
+                                   min="@WebAccess.Media.PointPlan.MinAlarmTextSize" max="@WebAccess.Media.PointPlan.MaxAlarmTextSize"
+                                   value="@(Model.Selected?.AlarmTextSize ?? WebAccess.Media.PointPlan.DefaultAlarmTextSize)">
+                        </label>
+                    </fieldset>
                     <div class="coordinates">
                         <label>水平位置 % <input id="x" name="x" type="number" min="0" max="100" value="@(Model.Selected?.X ?? 50)" required></label>
                         <label>垂直位置 % <input id="y" name="y" type="number" min="0" max="100" value="@(Model.Selected?.Y ?? 50)" required></label>
                     </div>
                     <fieldset>
                         <legend>圖示樣式</legend>
+                        <label>圖示大小（px）
+                            <input name="iconSize" id="icon-size" type="number" required
+                                   min="@WebAccess.Media.PointPlan.MinIconSize" max="@WebAccess.Media.PointPlan.MaxIconSize"
+                                   value="@(Model.Selected?.IconSize ?? WebAccess.Media.PointPlan.DefaultIconSize)">
+                        </label>
                         <div class="icon-grid">
                             @foreach ((string value, string label) in WebAccess.Media.Pages.PointsModel.AlarmIcons)
                             {
@@ -154,7 +174,11 @@
 </div>
 <script>
 const image = document.getElementById('image');
-const plan = document.getElementById('plan');
+const previewGroup = document.getElementById('alarm-preview-group');
+const previewText = document.getElementById('alarm-preview');
+const alarmText = document.getElementById('alarm-text');
+const alarmTextSize = document.getElementById('alarm-text-size');
+const iconSize = document.getElementById('icon-size');
 const marker = document.getElementById('marker');
 const markerImage = document.getElementById('marker-image');
 const customIcon = document.getElementById('custom-icon');
@@ -163,12 +187,22 @@ const x = document.getElementById('x');
 const y = document.getElementById('y');
 let temporaryImage = null;
 let temporaryIcon = null;
+function previewSize(field) {
+    return Math.max(Number(field.min), Math.min(Number(field.max), Number(field.value || field.defaultValue))) + 'px';
+}
+function updateText() {
+    previewText.textContent = alarmText.value.trim() || previewText.dataset.apiText || 'WebAccess 警報文字';
+    previewText.style.fontSize = previewSize(alarmTextSize);
+    previewText.hidden = imageOnly.checked;
+}
 function updateIcon() {
     const icon = document.querySelector('input[name=icon]:checked').value;
     const isCustom = icon === 'custom';
     marker.dataset.icon = icon;
     marker.dataset.flash = document.getElementById('flash').checked;
+    marker.style.setProperty('--icon-size', previewSize(iconSize));
     marker.hidden = imageOnly.checked;
+    updateText();
     document.getElementById('custom-icon-field').hidden = !isCustom;
     customIcon.disabled = !isCustom;
     customIcon.required = isCustom && !customIcon.dataset.existing;
@@ -176,6 +210,9 @@ function updateIcon() {
     markerImage.hidden = !isCustom || !source;
     if (source && markerImage.getAttribute('src') !== source) markerImage.src = source;
 }
+alarmText.addEventListener('input', updateText);
+alarmTextSize.addEventListener('input', updateText);
+iconSize.addEventListener('input', updateIcon);
 for (const field of document.querySelectorAll('input[name=icon], #flash, #image-only')) {
     field.addEventListener('change', updateIcon);
 }
@@ -237,7 +274,7 @@ function updatePlan() {
     const source = temporaryImage || (sharedFile.value ? '/engineering-media/' + encodeURIComponent(sharedFile.value) : originalImage);
     if (source) image.src = source;
     else image.removeAttribute('src');
-    plan.hidden = !source;
+    previewGroup.hidden = !source;
     document.getElementById('empty-plan').hidden = !!source;
 }
 fileInput.addEventListener('change', updatePlan);
