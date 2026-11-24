@@ -3,23 +3,85 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace WebAccess.Media.Pages;
 
-public sealed class PointsModel(PlayerSettings storage) : PageModel
+[RequestSizeLimit(102 * 1024 * 1024)]
+public sealed class PointsModel(PlayerSettings storage, EngineeringSettings connection, WebAccessClient client) : PageModel
 {
     public PointPlan[] Plans { get; private set; } = [];
     public PointPlan? Selected { get; private set; }
+    public FloorImage[] FloorImages { get; private set; } = [];
+    public int Revision { get; private set; }
     [TempData] public string? Feedback { get; set; }
+
+    public async Task<IActionResult> OnGetTagsAsync()
+    {
+        try
+        {
+            if (connection.Current is not ConnectionSettings current)
+            {
+                return new JsonResult(new { error = "請先儲存 WebAccess 連線設定。" }) { StatusCode = 409 };
+            }
+            return new JsonResult(await client.GetTagsAsync(current, HttpContext.RequestAborted));
+        }
+        catch (Exception error) when (!HttpContext.RequestAborted.IsCancellationRequested &&
+            (WebAccessClient.IsConnectionFailure(error) || error is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException))
+        {
+            return new JsonResult(new { error = "無法讀取測點清單，仍可手動輸入測點名稱。" }) { StatusCode = 502 };
+        }
+    }
 
     public void OnGet(string? selected, bool add = false)
     {
-        Plans = storage.Read().PointPlans ?? [];
+        Playlist playlist = storage.Read();
+        Plans = playlist.PointPlans ?? [];
+        FloorImages = playlist.FloorImages ?? [];
+        Revision = playlist.Revision;
         Selected = add ? null : Plans.FirstOrDefault(plan => plan.Point == selected) ?? Plans.FirstOrDefault();
     }
 
-    public async Task<IActionResult> OnPostSaveAsync(string? point, int x, int y, IFormFile? image)
+    public async Task<IActionResult> OnPostUploadFloorImagesAsync(List<IFormFile> images, string? selected)
+    {
+        if (images.Count is < 1 or > 20 || images.Any(image => !IsFloorImage(image)))
+        {
+            Feedback = "請選取 1–20 張 PNG 或 JPEG。";
+            return RedirectToPage(new { selected, add = selected is null });
+        }
+
+        Playlist playlist = storage.Read();
+        List<FloorImage> uploaded = [];
+        bool saved = false;
+        try
+        {
+            foreach (IFormFile image in images)
+            {
+                string file = await storage.UploadAsync(image, HttpContext.RequestAborted);
+                uploaded.Add(new FloorImage(file, Path.GetFileName(image.FileName)));
+            }
+            saved = storage.Save(playlist with { FloorImages = [.. (playlist.FloorImages ?? []), .. uploaded] });
+            Feedback = saved ? $"已加入 {uploaded.Count} 張平面圖。" : "設定已更新，請重新上傳。";
+        }
+        catch (InvalidDataException error)
+        {
+            Feedback = error.Message;
+        }
+        finally
+        {
+            if (!saved)
+            {
+                foreach (FloorImage image in uploaded)
+                {
+                    storage.RemoveMedia(image.File);
+                }
+            }
+        }
+        return RedirectToPage(new { selected, add = selected is null });
+    }
+
+    public async Task<IActionResult> OnPostSaveAsync(
+        string? point, int x, int y, IFormFile? image, string? sharedFile, int revision, bool isNew)
     {
         if (!ModelState.IsValid || string.IsNullOrWhiteSpace(point) || point.Length > 256 ||
             x is < 0 or > 100 || y is < 0 or > 100 ||
-            (image is not null && Path.GetExtension(image.FileName).ToLowerInvariant() is not (".png" or ".jpg" or ".jpeg")))
+            (image is not null && !IsFloorImage(image)))
         {
             Feedback = "請輸入測點 Name、0–100 的座標並選取 PNG 或 JPEG。";
             return RedirectToPage();
@@ -28,14 +90,22 @@ public sealed class PointsModel(PlayerSettings storage) : PageModel
         Playlist playlist = storage.Read();
         string name = point.Trim();
         PointPlan? previous = playlist.PointPlans?.FirstOrDefault(plan => plan.Point == name);
-        if (image is null && previous is null)
+        if (revision != playlist.Revision || (isNew && previous is not null))
         {
-            Feedback = "新增測點時請選取平面圖。";
+            Feedback = revision != playlist.Revision ? "設定已更新，請確認最新內容再儲存。" : "這個測點 Name 已存在。";
+            return RedirectToPage(new { selected = name, add = isNew });
+        }
+
+        FloorImage? shared = playlist.FloorImages?.FirstOrDefault(item => item.File == sharedFile);
+        string? selectedFile = shared?.File ?? previous?.File;
+        if (image is null && selectedFile is null)
+        {
+            Feedback = "新增測點時請選取共用平面圖或上傳一張圖片。";
             return RedirectToPage(new { add = true });
         }
         try
         {
-            string file = image is null ? previous!.File : await storage.UploadAsync(image, HttpContext.RequestAborted);
+            string file = image is null ? selectedFile! : await storage.UploadAsync(image, HttpContext.RequestAborted);
             PointPlan updated = new(name, file, x, y);
             PointPlan[] plans = playlist.PointPlans ?? [];
             plans = previous is null ? [.. plans, updated] : plans.Select(plan => plan.Point == name ? updated : plan).ToArray();
@@ -58,6 +128,9 @@ public sealed class PointsModel(PlayerSettings storage) : PageModel
         }
         return RedirectToPage(new { selected = name });
     }
+
+    private static bool IsFloorImage(IFormFile file) =>
+        Path.GetExtension(file.FileName).ToLowerInvariant() is ".png" or ".jpg" or ".jpeg";
 
     public IActionResult OnPostRemove(string point)
     {

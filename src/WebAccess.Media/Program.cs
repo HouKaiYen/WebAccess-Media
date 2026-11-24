@@ -2,7 +2,12 @@ using System.Net;
 using Microsoft.AspNetCore.DataProtection;
 using WebAccess.Media;
 
-WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
+string publishedWebRoot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
+WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    WebRootPath = Directory.Exists(publishedWebRoot) ? publishedWebRoot : null
+});
 string settingsDirectory = builder.Configuration["Storage:Directory"] ?? Path.Combine(
     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WebAccess-Media");
 IDataProtectionBuilder protection = builder.Services.AddDataProtection()
@@ -48,6 +53,7 @@ app.Use(async (context, next) =>
     await next(context);
 });
 app.MapRazorPages();
+app.MapStaticAssets();
 app.MapGet("/engineering/points", () => Results.Redirect("/engineering"));
 app.MapGet("/", () => Results.Redirect("/display"));
 app.MapGet("/display", () =>

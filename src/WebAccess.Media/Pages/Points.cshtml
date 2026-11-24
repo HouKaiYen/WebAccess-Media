@@ -1,23 +1,10 @@
 @page "/engineering"
 @model WebAccess.Media.Pages.PointsModel
 @addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
-<!doctype html>
-<html lang="zh-Hant">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>工程設定 · WebAccess Media</title>
+@{ Layout = "_ManagementLayout"; ViewData["Title"] = "工程設定"; }
+
+@section Styles {
 <style>
-    * { box-sizing: border-box; }
-    :root { color-scheme: dark; }
-    body { margin: 0; background: #0d151e; color: #edf3f8; font: 1rem/1.5 system-ui, sans-serif; }
-    nav { display: flex; flex-wrap: wrap; gap: .65rem; align-items: center; padding: .9rem 1.5rem; border-bottom: 1px solid #304352; background: #14202b; }
-    nav strong { margin-right: auto; }
-    a { color: #a7e4ef; text-decoration: none; }
-    a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid #99e3ef; outline-offset: 3px; }
-    nav a, button, .action { padding: .4rem .75rem; border: 1px solid #4a6376; border-radius: .4rem; font: inherit; color: inherit; background: #172634; }
-    button, .action { cursor: pointer; }
-    .primary { background: #a5e1eb; color: #101923; border-color: #a5e1eb; font-weight: 650; }
     .workspace { display: grid; grid-template-columns: minmax(190px, 250px) minmax(0, 1fr); min-height: calc(100vh - 68px); }
     aside { padding: 1rem; background: #14202b; border-right: 1px solid #304352; }
     h1, h2, p { margin: 0 0 .8rem; }
@@ -30,22 +17,22 @@
     .canvas { min-height: 350px; background: #080e14; border: 1px solid #304352; border-radius: .6rem; display: grid; place-items: center; padding: 1.15rem; text-align: center; }
     .plan { position: relative; display: inline-block; max-width: 100%; cursor: crosshair; }
     .plan img { max-width: 100%; max-height: 66vh; display: block; }
-    .marker { position: absolute; width: .95rem; height: .95rem; border: 2px solid white; background: #e74033; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+    .marker { position: absolute; width: 1.2rem; height: 1.2rem; border: 2px solid white; background: #e74033; border-radius: 50%; transform: translate(-50%, -50%); cursor: grab; touch-action: none; }
     [hidden] { display: none !important; }
     .inspector { padding: 1rem; border: 1px solid #304352; border-radius: .6rem; background: #172634; }
     .inspector h2 { font-size: 1.1rem; }
     label { display: grid; gap: .25rem; margin-bottom: .75rem; }
-    input { width: 100%; background: #101923; color: inherit; font: inherit; border: 1px solid #617789; border-radius: .35rem; padding: .38rem; }
     .coordinates { display: grid; grid-template-columns: 1fr 1fr; gap: .55rem; }
     .feedback { color: #9bdce6; }
     .muted { color: #b1c2d0; }
     .remove { margin-top: .6rem; }
     @@media (max-width: 800px) { .editor { grid-template-columns: 1fr; } }
     @@media (max-width: 560px) { .workspace { grid-template-columns: 1fr; } aside { border-right: 0; border-bottom: 1px solid #304352; } .canvas { min-height: 240px; } }
+
+    input { width: 100%; }
 </style>
-</head>
-<body>
-<nav><strong>WebAccess Media · 工程設定</strong><a href="/engineering/connection">WebAccess 連線</a><a href="/settings">返回日常管理</a><a href="/display">顯示頁</a></nav>
+}
+
 <div class="workspace">
     <aside>
         <a class="action" href="/engineering?add=true">＋ 新增測點頁面</a>
@@ -60,6 +47,13 @@
             <li><a asp-page="Points" asp-route-selected="@plan.Point" aria-current="@(Model.Selected?.Point == plan.Point ? "page" : null)">@plan.Point</a></li>
         }
         </ul>
+        <h2>共用平面圖</h2>
+        <form method="post" asp-page-handler="UploadFloorImages" enctype="multipart/form-data">
+            <input type="hidden" name="selected" value="@Model.Selected?.Point">
+            <label>批次選取底圖 <input name="images" type="file" multiple accept=".png,.jpg,.jpeg" required></label>
+            <button type="submit">加入共用圖庫</button>
+        </form>
+        <p class="muted">@Model.FloorImages.Length 張圖可供測點選用</p>
     </aside>
     <main>
         <h1>@(Model.Selected?.Point ?? "新增測點頁面")</h1>
@@ -85,8 +79,25 @@
             <div class="inspector">
                 <h2>測點與告警位置</h2>
                 <form method="post" asp-page-handler="Save" enctype="multipart/form-data">
-                    <label>測點 Name <input name="point" value="@Model.Selected?.Point" required maxlength="256" readonly="@(Model.Selected is not null)"></label>
-                    <label>平面圖 <input name="image" id="file" type="file" accept=".png,.jpg,.jpeg" required="@(Model.Selected is null)"></label>
+                    <input name="revision" type="hidden" value="@Model.Revision">
+                    <input name="isNew" type="hidden" value="@(Model.Selected is null ? "true" : "false")">
+                    <label>測點 Name <input name="point" list="webaccess-tags" value="@Model.Selected?.Point" required maxlength="256" readonly="@(Model.Selected is not null)"></label>
+                    @if (Model.Selected is null)
+                    {
+                        <datalist id="webaccess-tags"></datalist>
+                        <p><button type="button" id="load-tags">讀取 WebAccess 測點</button></p>
+                        <p class="muted" id="tag-status" role="status"></p>
+                    }
+                    <label>共用底圖
+                        <select name="sharedFile" id="shared-file">
+                            <option value="">@(Model.Selected is null ? "請選擇底圖" : "沿用目前底圖")</option>
+                            @foreach (WebAccess.Media.FloorImage floor in Model.FloorImages)
+                            {
+                                <option value="@floor.File">@floor.Name</option>
+                            }
+                        </select>
+                    </label>
+                    <label>或上傳獨立平面圖 <input name="image" id="file" type="file" accept=".png,.jpg,.jpeg"></label>
                     <div class="coordinates">
                         <label>水平位置 % <input id="x" name="x" type="number" min="0" max="100" value="@(Model.Selected?.X ?? 50)" required></label>
                         <label>垂直位置 % <input id="y" name="y" type="number" min="0" max="100" value="@(Model.Selected?.Y ?? 50)" required></label>
@@ -114,21 +125,58 @@ function updateMarker() {
 }
 x.addEventListener('input', updateMarker);
 y.addEventListener('input', updateMarker);
-image.addEventListener('click', event => {
+function locate(event) {
     const bounds = image.getBoundingClientRect();
-    x.value = Math.round(100 * (event.clientX - bounds.left) / bounds.width);
-    y.value = Math.round(100 * (event.clientY - bounds.top) / bounds.height);
+    if (!bounds.width || !bounds.height) return;
+    x.value = Math.max(0, Math.min(100, Math.round(100 * (event.clientX - bounds.left) / bounds.width)));
+    y.value = Math.max(0, Math.min(100, Math.round(100 * (event.clientY - bounds.top) / bounds.height)));
     updateMarker();
+}
+image.addEventListener('click', locate);
+marker.addEventListener('pointerdown', event => {
+    if (event.button !== 0) return;
+    marker.setPointerCapture(event.pointerId);
 });
-document.getElementById('file').addEventListener('change', event => {
-    const file = event.target.files[0];
-    if (!file) return;
+marker.addEventListener('pointermove', event => {
+    if (marker.hasPointerCapture(event.pointerId)) locate(event);
+});
+const loadTags = document.getElementById('load-tags');
+if (loadTags) {
+    loadTags.addEventListener('click', async () => {
+        const message = document.getElementById('tag-status');
+        const list = document.getElementById('webaccess-tags');
+        loadTags.disabled = true;
+        message.textContent = '正在讀取測點…';
+        try {
+            const response = await fetch('/engineering?handler=Tags', { cache: 'no-store' });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error);
+            list.replaceChildren(...data.map(tag => new Option(tag.description, tag.name)));
+            message.textContent = data.length ? '已載入，可在名稱欄位輸入關鍵字選取。' : 'WebAccess 目前沒有測點。';
+            document.querySelector('input[name=point]').focus();
+        } catch (error) {
+            message.textContent = error.message || '無法讀取測點，請手動輸入。';
+        } finally {
+            loadTags.disabled = false;
+        }
+    });
+}
+const fileInput = document.getElementById('file');
+const sharedFile = document.getElementById('shared-file');
+const originalImage = image.getAttribute('src');
+function updatePlan() {
+    const file = fileInput.files[0];
     if (temporaryImage) URL.revokeObjectURL(temporaryImage);
-    temporaryImage = URL.createObjectURL(file);
-    image.src = temporaryImage;
-    plan.hidden = false;
-    document.getElementById('empty-plan').hidden = true;
+    temporaryImage = file ? URL.createObjectURL(file) : null;
+    const source = temporaryImage || (sharedFile.value ? '/media/' + encodeURIComponent(sharedFile.value) : originalImage);
+    if (source) image.src = source;
+    else image.removeAttribute('src');
+    plan.hidden = !source;
+    document.getElementById('empty-plan').hidden = !!source;
+}
+fileInput.addEventListener('change', updatePlan);
+sharedFile.addEventListener('change', () => {
+    fileInput.value = '';
+    updatePlan();
 });
 </script>
-</body>
-</html>

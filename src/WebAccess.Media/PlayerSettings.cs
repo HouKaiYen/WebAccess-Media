@@ -8,9 +8,10 @@ public sealed record PlaylistItem(string File, string Name, int Seconds)
 }
 
 public sealed record PointPlan(string Point, string File, int X, int Y);
+public sealed record FloorImage(string File, string Name);
 
 public sealed record Playlist(int Revision, PlaylistItem[] Items, bool IsMuted, string Marquee, bool MarqueeAtTop,
-    PointPlan[]? PointPlans = null);
+    PointPlan[]? PointPlans = null, FloorImage[]? FloorImages = null);
 
 public sealed class PlayerSettings(string directory)
 {

@@ -1,29 +1,18 @@
 @page "/settings"
 @model WebAccess.Media.Pages.SettingsModel
 @addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
-<!doctype html>
-<html lang="zh-Hant">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>日常管理 · WebAccess Media</title>
-    <style>
-        * { box-sizing: border-box; }
-        body { margin: 0; background: #101923; color: #eef4fa; font: 1rem/1.55 system-ui, sans-serif; }
-        header { position: sticky; top: 0; z-index: 1; background: #14202b; border-bottom: 1px solid #334858; }
-        nav, main { max-width: 960px; margin: auto; padding: 1.25rem; }
+@{ Layout = "_ManagementLayout"; ViewData["Title"] = "日常管理"; }
+
+@section Styles {
+<style>
+        .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+        .toolbar h2 { margin-right: auto; }
         nav, .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
-        nav strong, .toolbar h2 { margin-right: auto; }
-        a { color: #9bdce6; }
         section, .upload { background: #182633; border: 1px solid #334858; border-radius: .6rem; padding: 1.2rem; margin-bottom: 1rem; }
         .row { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; padding: .75rem 0; border-top: 1px solid #334858; }
         label { display: inline-flex; align-items: center; gap: .5rem; }
-        input, button, textarea { font: inherit; color: inherit; background: #101923; border: 1px solid #617789; padding: .4rem .65rem; border-radius: .3rem; }
         input[type=number] { width: 5.5rem; }
         textarea { width: 100%; margin: .5rem 0; }
-        button { cursor: pointer; }
-        .primary { color: #101923; background: #a5e1eb; font-weight: 650; }
-        .feedback { color: #ffc47a; }
         .thumb { width: 76px; height: 48px; object-fit: contain; }
         [hidden] { display: none !important; }
         .options { display: grid; grid-template-columns: minmax(180px, 1fr) 2fr; gap: 1rem; }
@@ -38,10 +27,11 @@
         #preview-marquee span { display: inline-block; padding-left: 100%; animation: preview-scroll 12s linear infinite; }
         @@keyframes preview-scroll { to { transform: translateX(-100%); } }
         @@media (max-width: 640px) { .options { grid-template-columns: 1fr; } header { position: static; } }
-    </style>
-</head>
-<body>
-<header><nav><strong>WebAccess Media · 日常管理</strong><a href="/engineering">工程設定</a><a href="/display">顯示頁</a><span id="draft-status" class="muted" role="status">已儲存</span><button type="submit" form="playlist-form" class="primary">儲存變更</button></nav></header>
+
+        main { max-width: 1100px; margin: auto; padding: 1.25rem; }
+</style>
+}
+@section Actions { <span id="draft-status" class="muted" role="status">已儲存</span><button type="submit" form="playlist-form" class="primary">儲存變更</button> }
 <main>
     <div class="toolbar"><h2>待機播放內容</h2><button id="open-preview" type="button">預覽待機畫面</button></div>
     @if (Model.Feedback is string feedback)
@@ -180,5 +170,3 @@ dialog.addEventListener('close', () => {
     stage.replaceChildren();
 });
 </script>
-</body>
-</html>
