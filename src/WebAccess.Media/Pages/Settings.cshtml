@@ -1,0 +1,94 @@
+@page "/settings"
+@model WebAccess.Media.Pages.SettingsModel
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>日常管理 · WebAccess Media</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; background: #101923; color: #eef4fa; font: 1rem/1.55 system-ui, sans-serif; }
+        header { border-bottom: 1px solid #334858; }
+        nav, main { max-width: 960px; margin: auto; padding: 1.25rem; }
+        nav, .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
+        nav strong, .toolbar h2 { margin-right: auto; }
+        a { color: #9bdce6; }
+        section, .upload { background: #182633; border: 1px solid #334858; border-radius: .6rem; padding: 1.2rem; margin-bottom: 1rem; }
+        .row { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; padding: .75rem 0; border-top: 1px solid #334858; }
+        label { display: inline-flex; align-items: center; gap: .5rem; }
+        input, button, textarea { font: inherit; color: inherit; background: #101923; border: 1px solid #617789; padding: .4rem .65rem; border-radius: .3rem; }
+        input[type=number] { width: 5.5rem; }
+        textarea { width: 100%; margin: .5rem 0; }
+        button { cursor: pointer; }
+        .primary { color: #101923; background: #a5e1eb; font-weight: 650; }
+        .feedback { color: #ffc47a; }
+        .thumb { width: 76px; height: 48px; object-fit: contain; }
+    </style>
+</head>
+<body>
+<header><nav><strong>WebAccess Media</strong><a href="/engineering">工程設定</a><a href="/display?preview=idle" target="_blank" rel="noopener">預覽待機</a><a href="/display">顯示頁</a></nav></header>
+<main>
+    <h1>日常管理</h1>
+    @if (Model.Feedback is string feedback)
+    {
+        <p class="feedback" role="status">@feedback</p>
+    }
+    <form class="upload toolbar" method="post" asp-page-handler="Upload" enctype="multipart/form-data">
+        <label>新增媒體 <input type="file" name="media" accept=".png,.jpg,.jpeg,.gif,.mp4" required></label>
+        <button type="submit">上傳並加入</button>
+        <small>圖片與 GIF 上限 20 MB，MP4 上限 100 MB。</small>
+    </form>
+    <form method="post" asp-page-handler="Save">
+        <input type="hidden" asp-for="Revision">
+        <section>
+            <div class="toolbar"><h2>播放清單</h2><button type="submit" class="primary">儲存變更</button></div>
+            @if (Model.Items.Count == 0)
+            {
+                <p>播放清單目前是空的。</p>
+            }
+            <div id="playlist">
+                @for (int index = 0; index < Model.Items.Count; index++)
+                {
+                    string file = Model.Items[index].File;
+                    <div class="row">
+                        <input type="hidden" name="Items.Index" value="@index">
+                        <input type="hidden" asp-for="Items[index].File">
+                        @if (file.EndsWith(".mp4", StringComparison.Ordinal))
+                        {
+                            <span class="thumb">MP4</span>
+                        }
+                        else
+                        {
+                            <img class="thumb" src="/media/@file" alt="">
+                        }
+                        <label>名稱 <input asp-for="Items[index].Name" maxlength="200" required></label>
+                        <label>圖片秒數 <input asp-for="Items[index].Seconds" type="number" min="3" max="300" required></label>
+                        <button type="button" data-move="up" aria-label="上移">↑</button>
+                        <button type="button" data-move="down" aria-label="下移">↓</button>
+                        <button type="submit" name="remove" value="@file">移除</button>
+                    </div>
+                }
+            </div>
+        </section>
+        <section><h2>影片聲音</h2><label><input asp-for="IsMuted">靜音播放</label></section>
+        <section>
+            <h2>跑馬燈</h2>
+            <label for="Marquee">公告文字（留空停用）</label>
+            <textarea asp-for="Marquee" rows="3" maxlength="500"></textarea>
+            <label><input asp-for="MarqueeAtTop">顯示在上方</label>
+        </section>
+    </form>
+</main>
+<script>
+document.getElementById('playlist').addEventListener('click', function (event) {
+    const direction = event.target.dataset.move;
+    if (!direction) return;
+    const row = event.target.closest('.row');
+    if (direction === 'up' && row.previousElementSibling) this.insertBefore(row, row.previousElementSibling);
+    if (direction === 'down' && row.nextElementSibling) this.insertBefore(row.nextElementSibling, row);
+});
+</script>
+</body>
+</html>

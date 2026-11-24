@@ -1,9 +1,30 @@
+using System.Net;
+using System.Net.Sockets;
 using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 
 namespace WebAccess.Media;
 
 public sealed record ConnectionSettings(string ApiBase, string Project, string Username, string Password);
+
+public static class WebAccessAddress
+{
+    public static string? FromIp(string input)
+    {
+        string ip = input.Trim();
+        if (!IPAddress.TryParse(ip, out IPAddress? address) || ip.Contains('%'))
+        {
+            return null;
+        }
+
+        if (address.AddressFamily == AddressFamily.InterNetwork && ip != address.ToString())
+        {
+            return null;
+        }
+
+        return new UriBuilder("http", address.ToString()) { Path = "/WaWebService/Json" }.Uri.AbsoluteUri;
+    }
+}
 
 public sealed class EngineeringSettings(
     string directory, IDataProtector protector, WebAccessClient client)

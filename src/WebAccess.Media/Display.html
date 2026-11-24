@@ -8,28 +8,96 @@ body { margin: 0; background: #101923; color: #fff; font: 2rem system-ui, sans-s
 main { padding: 4vw; }
 img { max-width: 100%; max-height: 75vh; object-fit: contain; }
 p { color: #ffc47a; }
+[hidden] { display: none !important; }
+#standby { position: fixed; inset: 0; background: #000; }
+#standby img, #standby video { width: 100%; height: 100%; max-height: none; object-fit: contain; }
+#marquee { position: fixed; left: 0; right: 0; bottom: 0; overflow: hidden; white-space: nowrap; background: #101923e8; }
+#marquee.top { top: 0; bottom: auto; }
+#marquee span { display: inline-block; padding-left: 100vw; animation: ticker linear infinite; }
+#status { position: relative; }
+#plan-frame { display: inline-block; position: relative; max-width: 100%; }
+#plan { display: block; }
+#marker { position: absolute; width: 1.1rem; height: 1.1rem; border: 2px solid white; background: #e74033; border-radius: 50%; transform: translate(-50%, -50%); }
+@keyframes ticker { to { transform: translateX(-100%); } }
 </style>
 <main>
   <h1 id="title">正在取得顯示狀態</h1>
-  <img id="plan" alt="測點平面圖" hidden>
+  <div id="plan-frame" hidden><img id="plan" alt="測點平面圖"><span id="marker" hidden></span></div>
+  <div id="standby" hidden></div>
+  <div id="marquee" hidden><span></span></div>
   <p id="status" role="status"></p>
 </main>
 <script>
 const title = document.getElementById('title');
 const plan = document.getElementById('plan');
+const frame = document.getElementById('plan-frame');
+const marker = document.getElementById('marker');
 const status = document.getElementById('status');
+const standby = document.getElementById('standby');
+const marquee = document.getElementById('marquee');
+const preview = new URLSearchParams(location.search).get('preview') === 'idle';
+let revision = null;
+let playlist = null;
+let timer = null;
+function play(index) {
+  const item = playlist.items[index];
+  const element = document.createElement(item.isVideo ? 'video' : 'img');
+  const next = () => {
+    if (standby.firstChild === element) play((index + 1) % playlist.items.length);
+  };
+  if (item.isVideo) {
+    element.autoplay = true;
+    element.playsInline = true;
+    element.muted = playlist.isMuted;
+    element.loop = playlist.items.length === 1;
+    element.onended = next;
+  } else {
+    element.alt = item.name;
+  }
+  element.onerror = () => {
+    clearTimeout(timer);
+    timer = setTimeout(next, 3000);
+  };
+  standby.replaceChildren(element);
+  element.src = '/media/' + encodeURIComponent(item.file);
+  if (!item.isVideo && playlist.items.length > 1) timer = setTimeout(next, item.seconds * 1000);
+}
+function setStandby(next) {
+  const nextRevision = next ? next.revision : null;
+  if (revision === nextRevision) return;
+  revision = nextRevision;
+  playlist = next;
+  clearTimeout(timer);
+  standby.replaceChildren();
+  standby.hidden = !next || !next.items.length;
+  marquee.hidden = !next || !next.marquee;
+  if (!marquee.hidden) {
+    const text = marquee.firstElementChild;
+    text.textContent = next.marquee;
+    marquee.classList.toggle('top', next.marqueeAtTop);
+    text.style.animationDuration = Math.max(10, text.scrollWidth / 80) + 's';
+  }
+  if (!standby.hidden) play(0);
+}
 async function refresh() {
   try {
     const response = await fetch('/api/display', { cache: 'no-store' });
     if (!response.ok) throw new Error();
     const state = await response.json();
-    title.textContent = state.alarm ? '告警　' + state.alarm.point + (state.alarm.description ? '　' + state.alarm.description : '') : '待機中';
-    const url = state.alarm && state.alarm.floorPlanUrl;
-    plan.hidden = !url;
+    const alarm = preview ? null : state.alarm;
+    setStandby(alarm ? null : state.playlist);
+    title.textContent = alarm ? '告警　' + alarm.point + (alarm.description ? '　' + alarm.description : '') : '待機中';
+    const url = alarm && alarm.floorPlanUrl;
+    frame.hidden = !url;
     if (url && plan.getAttribute('src') !== url) plan.src = url;
+    marker.hidden = !url || !state.marker;
+    if (!marker.hidden) {
+      marker.style.left = state.marker.x + '%';
+      marker.style.top = state.marker.y + '%';
+    }
     const lastSuccess = state.lastSuccessAt ? '，最後更新 ' + new Date(state.lastSuccessAt).toLocaleString('zh-TW') : '';
     const messages = { disconnected: 'WebAccess 連線異常' + lastSuccess, connecting: '正在連線至 WebAccess', unconfigured: '尚未設定 WebAccess' };
-    status.textContent = messages[state.connectionStatus] || '';
+    status.textContent = preview ? '' : messages[state.connectionStatus] || '';
   } catch {
     status.textContent = '顯示服務連線中斷';
   } finally {
