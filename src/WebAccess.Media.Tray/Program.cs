@@ -8,8 +8,19 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
-        if (args.Length != 3 || !Uri.TryCreate(args[0], UriKind.Absolute, out Uri? address) ||
-            !address.IsLoopback || address.Scheme is not ("http" or "https") ||
+        if (args.FirstOrDefault() == "--configure-startup")
+        {
+            StartupSetup.Configure(args);
+            return;
+        }
+        if (args.Length == 3 && args[0] == "--watch-startup" && TryReadAddress(args[1], out Uri? watched) &&
+            args[2].Length == 16 && args[2].All(Uri.IsHexDigit))
+        {
+            using Mutex instance = new(false, $@"Local\WebAccess.Media.StartupTray.{args[2]}", out bool created);
+            if (created) Run(watched!, null, null, args[2]);
+            return;
+        }
+        if (args.Length != 3 || !TryReadAddress(args[0], out Uri? address) ||
             !int.TryParse(args[1], out int processId) || processId <= 0 ||
             !EventWaitHandle.TryOpenExisting(args[2], out EventWaitHandle? shutdown))
         {
@@ -21,20 +32,24 @@ internal static class Program
         {
             if (service is not null)
             {
-                Run(address, service, shutdown);
+                Run(address!, service, shutdown, null);
             }
         }
     }
 
-    private static void Run(Uri address, Process service, EventWaitHandle shutdown)
+    private static bool TryReadAddress(string value, out Uri? address) =>
+        Uri.TryCreate(value, UriKind.Absolute, out address) && address.IsLoopback && address.Scheme is "http" or "https";
+
+    private static void Run(Uri address, Process? service, EventWaitHandle? shutdown, string? startupId)
     {
         ApplicationConfiguration.Initialize();
         using ApplicationContext context = new();
         using ContextMenuStrip menu = new();
         ToolStripMenuItem status = new("正在檢查服務…") { Enabled = false };
-        ToolStripMenuItem open = new("開啟日常管理");
-        ToolStripMenuItem exit = new("結束 WebAccess Media");
-        menu.Items.AddRange([status, open, new ToolStripSeparator(), exit]);
+        ToolStripMenuItem open = new("開啟日常管理") { Enabled = startupId is null };
+        ToolStripMenuItem exit = new("結束 WebAccess Media") { Enabled = startupId is null };
+        ToolStripMenuItem closeIcon = new("關閉通知區圖示") { Visible = startupId is not null };
+        menu.Items.AddRange([status, open, new ToolStripSeparator(), exit, closeIcon]);
         using NotifyIcon icon = new()
         {
             Icon = SystemIcons.Application,
@@ -48,25 +63,36 @@ internal static class Program
             Timeout = TimeSpan.FromSeconds(2)
         };
         using System.Windows.Forms.Timer timer = new() { Interval = 3000 };
+        bool isStopping = false;
+        void CloseIcon()
+        {
+            icon.Visible = false;
+            context.ExitThread();
+        }
         timer.Tick += async (_, _) =>
         {
             timer.Stop();
-            if (service.HasExited)
+            if (service?.HasExited == true)
             {
-                icon.Visible = false;
-                context.ExitThread();
+                CloseIcon();
                 return;
             }
             try
             {
-                if (exit.Enabled)
+                ServiceStatus? result = await ReadStatusAsync(client);
+                bool available = result?.Application == "WebAccess.Media" &&
+                    (startupId is null || result.StartupInstance == startupId);
+                if (isStopping && startupId is not null && !available)
                 {
-                    string text = await ReadStatusAsync(client);
-                    if (exit.Enabled)
-                    {
-                        status.Text = text;
-                        icon.Text = $"WebAccess Media · {text}";
-                    }
+                    CloseIcon();
+                }
+                else if (!isStopping)
+                {
+                    open.Enabled = available;
+                    exit.Enabled = available;
+                    string text = available ? DescribeStatus(result!.ConnectionStatus) : "服務未執行";
+                    status.Text = text;
+                    icon.Text = $"WebAccess Media · {text}";
                 }
             }
             finally
@@ -78,6 +104,7 @@ internal static class Program
             }
         };
         open.Click += (_, _) => OpenSettings(address);
+        closeIcon.Click += (_, _) => CloseIcon();
         icon.MouseDoubleClick += (_, eventArgs) =>
         {
             if (eventArgs.Button == MouseButtons.Left && open.Enabled)
@@ -87,11 +114,17 @@ internal static class Program
         };
         exit.Click += (_, _) =>
         {
+            bool signaled = shutdown?.Set() ?? SignalStartupShutdown(startupId!);
+            if (!signaled)
+            {
+                status.Text = "無法聯絡背景服務";
+                return;
+            }
+            isStopping = true;
             exit.Enabled = false;
             open.Enabled = false;
             status.Text = "正在結束服務…";
             icon.Text = $"WebAccess Media · {status.Text}";
-            shutdown.Set();
         };
         timer.Start();
         Application.Run(context);
@@ -109,29 +142,39 @@ internal static class Program
         }
     }
 
-    private static async Task<string> ReadStatusAsync(HttpClient client)
+    private static bool SignalStartupShutdown(string startupId)
     {
         try
         {
-            ServiceStatus? result = await client.GetFromJsonAsync<ServiceStatus>("/api/status");
-            if (result?.Application != "WebAccess.Media")
-            {
-                return "服務未執行";
-            }
-            return result.ConnectionStatus switch
-            {
-                "connected" => "服務執行中 · WebAccess 已連線",
-                "disconnected" => "服務執行中 · WebAccess 斷線",
-                "connecting" => "服務執行中 · WebAccess 連線中",
-                "unconfigured" => "服務執行中 · WebAccess 未設定",
-                _ => "服務執行中"
-            };
+            if (!EventWaitHandle.TryOpenExisting($@"Global\WebAccess.Media.Startup.{startupId}", out EventWaitHandle? signal)) return false;
+            using (signal) return signal.Set();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static async Task<ServiceStatus?> ReadStatusAsync(HttpClient client)
+    {
+        try
+        {
+            return await client.GetFromJsonAsync<ServiceStatus>("/api/status");
         }
         catch (Exception error) when (error is HttpRequestException or OperationCanceledException or System.Text.Json.JsonException)
         {
-            return "服務未執行";
+            return null;
         }
     }
+
+    private static string DescribeStatus(string connectionStatus) => connectionStatus switch
+    {
+        "connected" => "服務執行中 · WebAccess 已連線",
+        "disconnected" => "服務執行中 · WebAccess 斷線",
+        "connecting" => "服務執行中 · WebAccess 連線中",
+        "unconfigured" => "服務執行中 · WebAccess 未設定",
+        _ => "服務執行中"
+    };
 
     private static void OpenSettings(Uri address)
     {
@@ -149,5 +192,5 @@ internal static class Program
         }
     }
 
-    private sealed record ServiceStatus(string Application, string ConnectionStatus);
+    private sealed record ServiceStatus(string Application, string ConnectionStatus, string? StartupInstance);
 }

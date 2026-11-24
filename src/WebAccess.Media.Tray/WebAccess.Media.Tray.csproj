@@ -7,4 +7,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../WebAccess.Media/WindowsStartupTasks.cs" Link="WindowsStartupTasks.cs" />
+  </ItemGroup>
 </Project>

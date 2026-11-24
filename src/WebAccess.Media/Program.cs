@@ -10,6 +10,7 @@ WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationO
 });
 string settingsDirectory = builder.Configuration["Storage:Directory"] ?? Path.Combine(
     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WebAccess-Media");
+builder.Configuration["Storage:Directory"] = Path.GetFullPath(settingsDirectory);
 IDataProtectionBuilder protection = builder.Services.AddDataProtection()
     .SetApplicationName("WebAccess-Media")
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(settingsDirectory, "keys")));
@@ -33,6 +34,7 @@ builder.Services.AddSingleton<WebAccessAlarmMonitor>();
 builder.Services.AddHostedService(services => services.GetRequiredService<WebAccessAlarmMonitor>());
 
 WebApplication app = builder.Build();
+string? startupInstance = null;
 app.Use(async (context, next) =>
 {
     if (context.Request.Path.StartsWithSegments("/engineering", StringComparison.OrdinalIgnoreCase) ||
@@ -60,7 +62,7 @@ app.MapGet("/", () => Results.Redirect("/display"));
 app.MapGet("/display", () =>
     Results.File(Path.Combine(AppContext.BaseDirectory, "Display.html"), "text/html; charset=utf-8"));
 app.MapGet("/api/status", (WebAccessAlarmMonitor monitor) =>
-    Results.Ok(new { Application = "WebAccess.Media", monitor.State.ConnectionStatus }));
+    Results.Ok(new { Application = "WebAccess.Media", monitor.State.ConnectionStatus, StartupInstance = startupInstance }));
 app.MapGet("/api/display", (WebAccessAlarmMonitor monitor, PlayerSettings player) =>
 {
     WebAccessDisplayState state = monitor.State;
@@ -91,8 +93,25 @@ app.MapGet("/engineering-media/{file}", (string file, PlayerSettings player, Htt
         ? Results.File(path, PlayerSettings.MimeType(Path.GetExtension(file)))
         : Results.NotFound();
 });
-if (OperatingSystem.IsWindows() && app.Configuration.GetValue<bool>("Tray:Enabled"))
+if (OperatingSystem.IsWindows())
 {
-    app.Lifetime.ApplicationStarted.Register(() => _ = WindowsTrayLauncher.RunAsync(app));
+    bool startsInBackground = app.Configuration.GetValue<bool>("Startup:Background");
+    if (startsInBackground || app.Configuration.GetValue<bool>("Tray:Enabled"))
+    {
+        app.Lifetime.ApplicationStarted.Register(() =>
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                return;
+            }
+            WindowsStartupTasks? background = startsInBackground
+                ? WindowsTrayLauncher.GetStartupTasks(app.Urls, settingsDirectory) : null;
+            startupInstance = background?.InstanceId;
+            if (!startsInBackground || background is not null)
+            {
+                _ = WindowsTrayLauncher.RunAsync(app, background);
+            }
+        });
+    }
 }
 app.Run();
