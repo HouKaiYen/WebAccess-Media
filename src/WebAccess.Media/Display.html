@@ -23,11 +23,13 @@ async function refresh() {
     const response = await fetch('/api/display', { cache: 'no-store' });
     if (!response.ok) throw new Error();
     const state = await response.json();
-    title.textContent = state.alarm ? '告警　' + state.alarm.point : '待機中';
+    title.textContent = state.alarm ? '告警　' + state.alarm.point + (state.alarm.description ? '　' + state.alarm.description : '') : '待機中';
     const url = state.alarm && state.alarm.floorPlanUrl;
     plan.hidden = !url;
     if (url && plan.getAttribute('src') !== url) plan.src = url;
-    status.textContent = '';
+    const lastSuccess = state.lastSuccessAt ? '，最後更新 ' + new Date(state.lastSuccessAt).toLocaleString('zh-TW') : '';
+    const messages = { disconnected: 'WebAccess 連線異常' + lastSuccess, connecting: '正在連線至 WebAccess', unconfigured: 'WebAccess 連線設定不完整' };
+    status.textContent = messages[state.connectionStatus] || '';
   } catch {
     status.textContent = '顯示服務連線中斷';
   } finally {
