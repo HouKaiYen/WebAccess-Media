@@ -109,7 +109,7 @@ async function refresh() {
       marker.style.left = appearance.x + '%';
       marker.style.top = appearance.y + '%';
       marker.style.setProperty('--icon-size', appearance.iconSize + 'px');
-      marker.dataset.icon = appearance.icon || 'dot';
+      marker.dataset.icon = appearance.icon || 'sos';
       marker.dataset.flash = appearance.flash;
       const iconUrl = appearance.icon === 'custom' && appearance.iconUrl;
       markerImage.hidden = !iconUrl;

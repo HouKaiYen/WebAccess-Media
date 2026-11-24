@@ -8,9 +8,10 @@ public sealed record PlaylistItem(string File, string Name, int Seconds)
 }
 
 public sealed record PointPlan(string Point, string File, int X, int Y,
-    string Icon = "dot", bool Flash = true, bool ImageOnly = false, string? IconFile = null,
+    string Icon = PointPlan.DefaultIcon, bool Flash = true, bool ImageOnly = false, string? IconFile = null,
     string? AlarmText = null, int AlarmTextSize = PointPlan.DefaultAlarmTextSize, int IconSize = PointPlan.DefaultIconSize)
 {
+    public const string DefaultIcon = "sos";
     public const int DefaultAlarmTextSize = 48;
     public const int DefaultIconSize = 36;
     public const int MinAlarmTextSize = 16;

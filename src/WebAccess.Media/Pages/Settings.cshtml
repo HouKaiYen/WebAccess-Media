@@ -45,10 +45,11 @@
         main { max-width: 1100px; margin: auto; padding: 1.25rem; }
 </style>
 }
-@section Actions { <span id="draft-status" class="muted" role="status">已儲存</span><button type="submit" form="playlist-form" class="primary">儲存變更</button> }
+@section Actions { <button type="submit" form="playlist-form" class="primary">儲存設定</button> }
 <main>
     <div class="intro toolbar">
         <div><h1>管理待機播放內容</h1><p>新增圖片或影片，設定播放順序與圖片停留時間。</p></div>
+        <span id="draft-status" class="muted" role="status">已儲存</span>
         <button id="open-preview" type="button">▷ 預覽待機畫面</button>
     </div>
     @if (Model.Feedback is string feedback)
