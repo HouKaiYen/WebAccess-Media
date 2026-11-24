@@ -61,7 +61,8 @@
         .point-row { gap: .5rem; }
         .point-row button, .floor-delete { min-width: 44px; min-height: 44px; padding-inline: .65rem; }
     }
-    .floor-card img { width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: contain; background: var(--background); }
+    .floor-card img { width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: contain; }
+    .floor-card img, #image, #simulation-image { background-color: #fff; }
     .floor-card span { text-overflow: ellipsis; overflow: hidden; white-space: nowrap; font-size: .8rem; }
     .icon-option { display: flex; align-items: center; gap: .4rem; margin: 0; padding: .35rem; border: 1px solid var(--border); border-radius: .4rem; font-size: .85rem; }
     .icon-option:has(:checked) { border-color: var(--accent); background: var(--accent-soft); }
