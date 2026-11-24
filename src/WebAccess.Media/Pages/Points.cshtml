@@ -1,7 +1,13 @@
 @page "/engineering"
 @model WebAccess.Media.Pages.PointsModel
 @addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
-@{ Layout = "_ManagementLayout"; ViewData["Title"] = "工程設定"; }
+@{
+    Layout = "_ManagementLayout";
+    ViewData["Title"] = "工程設定";
+    const int defaultCoordinate = 36;
+    int initialX = Model.Selected?.X ?? defaultCoordinate;
+    int initialY = Model.Selected?.Y ?? defaultCoordinate;
+}
 
 @section Styles {
 <link rel="stylesheet" href="/alarm-icons.css">
@@ -126,7 +132,7 @@
                     {
                         <img id="image" alt="測點平面圖預覽">
                     }
-                    <span class="marker alarm-icon" id="marker" data-icon="@(Model.Selected?.Icon ?? "dot")" style="left:@(Model.Selected?.X ?? 50)%;top:@(Model.Selected?.Y ?? 50)%">
+                    <span class="marker alarm-icon" id="marker" data-icon="@(Model.Selected?.Icon ?? "dot")" style="left:@(initialX)%;top:@(initialY)%">
                         <img id="marker-image" alt="" hidden>
                     </span>
                 </div>
@@ -166,8 +172,8 @@
                         </label>
                     </fieldset>
                     <div class="coordinates">
-                        <label>水平位置 % <input id="x" name="x" type="number" min="0" max="100" value="@(Model.Selected?.X ?? 50)" required></label>
-                        <label>垂直位置 % <input id="y" name="y" type="number" min="0" max="100" value="@(Model.Selected?.Y ?? 50)" required></label>
+                        <label>水平位置 % <input id="x" name="x" type="number" min="0" max="100" value="@initialX" required></label>
+                        <label>垂直位置 % <input id="y" name="y" type="number" min="0" max="100" value="@initialY" required></label>
                     </div>
                     <fieldset>
                         <legend>圖示樣式</legend>
