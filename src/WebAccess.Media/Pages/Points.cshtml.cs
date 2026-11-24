@@ -150,7 +150,7 @@ public sealed class PointsModel(
         string? point, int x, int y, IFormFile? image, string? sharedFile, int revision, bool isNew,
         string icon = PointPlan.DefaultIcon, bool flash = false, bool imageOnly = false, IFormFile? customIcon = null,
         string? alarmText = null, int alarmTextSize = PointPlan.DefaultAlarmTextSize, int iconSize = PointPlan.DefaultIconSize,
-        string? suggestedAlarmText = null)
+        string? suggestedAlarmText = null, bool addNext = false)
     {
         string? invalidField = ModelState.FirstOrDefault(entry => entry.Value?.Errors.Count > 0).Key;
         if (invalidField is not null)
@@ -259,9 +259,14 @@ public sealed class PointsModel(
                 }
             }
         }
+        object destination = isNew && addNext ? new { add = true } : new { selected = name };
+        if (isNew && addNext)
+        {
+            Feedback = $"已儲存「{name}」，可以新增下一個測點。";
+        }
         return WantsJson()
-            ? new JsonResult(new { redirect = Url.Page("Points", new { selected = name }) })
-            : RedirectToPage(new { selected = name });
+            ? new JsonResult(new { redirect = Url.Page("Points", destination) })
+            : RedirectToPage(destination);
     }
 
     private bool WantsJson() => Request.Headers.Accept.ToString().Contains("application/json", StringComparison.OrdinalIgnoreCase);

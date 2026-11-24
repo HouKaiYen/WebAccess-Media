@@ -113,6 +113,7 @@
     .tag-result:hover, .tag-result:focus-visible { background: var(--accent-soft); }
     .workspace-title, .simulation-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .5rem; margin-bottom: .8rem; }
     .workspace-title h1, .simulation-toolbar h2 { margin: 0; }
+    .workspace-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
     .simulation-dialog { width: min(68rem, calc(100vw - 2rem)); max-height: 92vh; padding: 1rem; border: 1px solid var(--border); color: var(--text); }
     .simulation-dialog::backdrop { background: #17243c80; }
     .simulation-stage { display: grid; justify-items: center; align-content: center; min-height: 64vh; gap: .8rem; padding: 1rem; border-radius: .5rem; background: #101923; color: #fff; text-align: center; }
@@ -182,7 +183,13 @@
                 <h1>@(Model.Selected?.Point ?? "新增測點頁面")</h1>
                 <p id="point-draft-status" class="muted" role="status">@(Model.Selected is null ? "尚未儲存" : "已儲存")</p>
             </div>
-            <button id="open-simulation" type="button" aria-haspopup="dialog" disabled="@(Model.Selected is null)">模擬警報預覽</button>
+            <div class="workspace-actions">
+                <button id="open-simulation" type="button" aria-haspopup="dialog" disabled="@(Model.Selected is null)">模擬警報預覽</button>
+                @if (Model.Selected is null)
+                {
+                    <button id="save-and-add-point" type="submit" form="point-form" name="addNext" value="true">儲存並新增下一筆</button>
+                }
+            </div>
         </div>
         @if (Model.Feedback is string feedback)
         {
@@ -639,7 +646,10 @@ const libraryForm = document.getElementById('floor-upload');
 const uploadInput = document.getElementById('floor-upload-input');
 const libraryStatus = document.getElementById('floor-status');
 const revision = document.getElementById('point-revision');
-const savePoint = document.getElementById('save-point');
+const saveButtons = document.querySelectorAll('button[type="submit"][form="point-form"]');
+function setSaveButtonsDisabled(disabled) {
+    for (const button of saveButtons) button.disabled = disabled;
+}
 let libraryBusy = false;
 let pointSaving = false;
 const saveStatus = document.getElementById('point-save-status');
@@ -660,10 +670,10 @@ pointForm.addEventListener('submit', async event => {
     if (pointSaving || libraryBusy) return;
     clearPointError();
     reloadPoint.hidden = true;
-    const body = new FormData(pointForm);
+    const body = new FormData(pointForm, event.submitter);
     pointSaving = true;
     pointForm.inert = true;
-    savePoint.disabled = true;
+    setSaveButtonsDisabled(true);
     saveStatus.textContent = '正在儲存測點…';
     try {
         const response = await fetch(pointForm.action, { method: 'POST', headers: { Accept: 'application/json' }, body });
@@ -694,7 +704,7 @@ pointForm.addEventListener('submit', async event => {
     } finally {
         pointSaving = false;
         pointForm.inert = false;
-        savePoint.disabled = false;
+        setSaveButtonsDisabled(false);
         invalidPointField?.focus();
     }
 });
@@ -723,7 +733,7 @@ async function updateLibrary(endpoint, body, pending) {
     if (libraryBusy || pointSaving) return;
     libraryBusy = true;
     uploadInput.disabled = true;
-    savePoint.disabled = true;
+    setSaveButtonsDisabled(true);
     libraryStatus.textContent = pending;
     try {
         body.set('revision', revision.value);
@@ -739,7 +749,7 @@ async function updateLibrary(endpoint, body, pending) {
     } finally {
         libraryBusy = false;
         uploadInput.disabled = false;
-        savePoint.disabled = false;
+        setSaveButtonsDisabled(false);
         uploadInput.value = '';
     }
 }
