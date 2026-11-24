@@ -27,7 +27,7 @@
     </style>
 </head>
 <body>
-<header><nav><strong>WebAccess Media</strong><a href="/display">開啟顯示頁</a></nav></header>
+<header><nav><strong>WebAccess Media</strong><a href="/engineering/points">測點頁面</a><a href="/settings">日常管理</a><a href="/display">開啟顯示頁</a></nav></header>
 <main>
     <h1>工程設定</h1>
     @if (Model.Feedback is string feedback)
@@ -35,9 +35,9 @@
         <p class="feedback @(Model.IsSuccessful ? "success" : "error")" role="status">@feedback</p>
     }
     <form method="post" asp-page-handler="Save">
-        <label>WebAccess API 基底網址
-            <input asp-for="Input.ApiBase" type="url" required placeholder="https://webaccess.example.com/api">
-            <small>填入告警 API 所在的基底路徑。支援 HTTPS 的環境請使用 HTTPS。</small>
+        <label>WebAccess IP 位址
+            <input asp-for="Input.Ip" required placeholder="192.168.1.100" spellcheck="false">
+            <small>程式會自動使用 HTTP 並加上 /WaWebService/Json。</small>
         </label>
         <label>專案名稱<input asp-for="Input.Project" required></label>
         <label>帳號<input asp-for="Input.Username" required autocomplete="username"></label>

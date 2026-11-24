@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Net;
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -18,7 +19,13 @@ public sealed class EngineeringModel(EngineeringSettings settings) : PageModel
         {
             if (settings.Current is ConnectionSettings current)
             {
-                Input = new() { ApiBase = current.ApiBase, Project = current.Project, Username = current.Username };
+                Input = new()
+                {
+                    Ip = Uri.TryCreate(current.ApiBase, UriKind.Absolute, out Uri? address) &&
+                        IPAddress.TryParse(address.Host, out IPAddress? ip) ? ip.ToString() : "",
+                    Project = current.Project,
+                    Username = current.Username
+                };
             }
         }
         catch (Exception error) when (IsStorageFailure(error))
@@ -35,19 +42,21 @@ public sealed class EngineeringModel(EngineeringSettings settings) : PageModel
         string password = Input.Password ?? "";
         Input.Password = null;
         ModelState.Remove("Input.Password");
-        if (!ModelState.IsValid)
+        string? apiBase = WebAccessAddress.FromIp(Input.Ip ?? "");
+        if (!ModelState.IsValid || apiBase is null)
         {
-            Feedback = "請檢查 API 基底網址、專案名稱及帳號。";
+            Feedback = "請輸入有效的 IP 位址、專案名稱及帳號。";
             return Page();
         }
 
         try
         {
-            string apiBase = Input.ApiBase.Trim();
             string project = Input.Project.Trim();
             string username = Input.Username.Trim();
             if (password.Length == 0 && settings.Current is ConnectionSettings current &&
-                current.ApiBase == apiBase && current.Project == project && current.Username == username)
+                Uri.TryCreate(current.ApiBase, UriKind.Absolute, out Uri? previousAddress) &&
+                Uri.TryCreate(apiBase, UriKind.Absolute, out Uri? newAddress) &&
+                previousAddress == newAddress && current.Project == project && current.Username == username)
             {
                 password = current.Password;
             }
@@ -84,7 +93,7 @@ public sealed class EngineeringModel(EngineeringSettings settings) : PageModel
 
     public sealed class ConnectionForm
     {
-        [Required, StringLength(2048)] public string ApiBase { get; set; } = "";
+        [Required, StringLength(64)] public string Ip { get; set; } = "";
         [Required, StringLength(256)] public string Project { get; set; } = "";
         [Required, StringLength(256)] public string Username { get; set; } = "";
         public string? Password { get; set; }

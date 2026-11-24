@@ -1,0 +1,47 @@
+@page "/engineering/points"
+@model WebAccess.Media.Pages.PointsModel
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>測點頁面 · WebAccess Media</title>
+<style>
+    body { margin: 2rem auto; padding: 0 1rem; max-width: 820px; background: #101923; color: #eef4fa; font: 1rem/1.55 system-ui, sans-serif; }
+    nav, form { display: flex; align-items: center; flex-wrap: wrap; gap: .8rem; }
+    a { color: #9bdce6; }
+    section { margin: 1rem 0; padding: 1rem; border: 1px solid #334858; border-radius: .6rem; background: #182633; }
+    input, button { font: inherit; padding: .25rem .5rem; }
+    .plan { position: relative; display: inline-block; }
+    img { max-width: 230px; max-height: 135px; display: block; }
+    .marker { position: absolute; width: .85rem; height: .85rem; border: 2px solid white; background: #e74033; border-radius: 50%; transform: translate(-50%, -50%); }
+</style>
+</head>
+<body>
+<nav><a href="/engineering">WebAccess 連線</a><a href="/settings">日常管理</a><a href="/display">顯示頁</a></nav>
+<h1>測點頁面</h1>
+@if (Model.Feedback is string feedback)
+{
+    <p role="status">@feedback</p>
+}
+<section>
+    <h2>新增或更新平面圖</h2>
+    <form method="post" asp-page-handler="Save" enctype="multipart/form-data">
+        <label>測點 Name <input name="point" required maxlength="256"></label>
+        <label>平面圖 <input name="image" type="file" accept=".png,.jpg,.jpeg" required></label>
+        <label>水平位置 % <input name="x" type="number" min="0" max="100" value="50" required></label>
+        <label>垂直位置 % <input name="y" type="number" min="0" max="100" value="50" required></label>
+        <button type="submit">儲存平面圖</button>
+    </form>
+</section>
+@foreach (WebAccess.Media.PointPlan plan in Model.Plans)
+{
+    <section>
+        <h2>@plan.Point</h2>
+        <div class="plan"><img src="/media/@plan.File" alt="測點平面圖"><span class="marker" style="left:@(plan.X)%;top:@(plan.Y)%"></span></div>
+        <form method="post" asp-page-handler="Remove"><button name="point" value="@plan.Point">移除平面圖</button></form>
+    </section>
+}
+</body>
+</html>

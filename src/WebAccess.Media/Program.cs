@@ -14,6 +14,7 @@ if (OperatingSystem.IsWindows())
 }
 
 builder.Services.AddRazorPages();
+builder.Services.AddSingleton(new PlayerSettings(Path.GetFullPath(settingsDirectory)));
 builder.Services.AddHttpClient("WebAccess", client => client.Timeout = TimeSpan.FromSeconds(5))
     .RemoveAllLoggers()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
@@ -30,7 +31,8 @@ builder.Services.AddHostedService(services => services.GetRequiredService<WebAcc
 WebApplication app = builder.Build();
 app.Use(async (context, next) =>
 {
-    if (context.Request.Path.StartsWithSegments("/engineering", StringComparison.OrdinalIgnoreCase))
+    if (context.Request.Path.StartsWithSegments("/engineering", StringComparison.OrdinalIgnoreCase) ||
+        context.Request.Path.StartsWithSegments("/settings", StringComparison.OrdinalIgnoreCase))
     {
         IPAddress? remote = context.Connection.RemoteIpAddress;
         string host = context.Request.Host.Host.Trim('[', ']');
@@ -50,5 +52,26 @@ app.MapRazorPages();
 app.MapGet("/", () => Results.Redirect("/display"));
 app.MapGet("/display", () =>
     Results.File(Path.Combine(AppContext.BaseDirectory, "Display.html"), "text/html; charset=utf-8"));
-app.MapGet("/api/display", (WebAccessAlarmMonitor monitor) => Results.Ok(monitor.State));
+app.MapGet("/api/display", (WebAccessAlarmMonitor monitor, PlayerSettings player) =>
+{
+    WebAccessDisplayState state = monitor.State;
+    Playlist playlist = player.Read();
+    PointPlan? marker = playlist.PointPlans?.FirstOrDefault(plan => plan.Point == state.Alarm?.Point);
+    Alarm? alarm = marker is null || state.Alarm is null
+        ? state.Alarm
+        : state.Alarm with { FloorPlanUrl = $"/media/{marker.File}" };
+    return Results.Ok(new
+    {
+        Alarm = alarm, Marker = marker is null ? null : new { marker.X, marker.Y },
+        state.ConnectionStatus, state.LastSuccessAt,
+        Playlist = new { playlist.Revision, playlist.Items, playlist.IsMuted, playlist.Marquee, playlist.MarqueeAtTop }
+    });
+});
+app.MapGet("/media/{file}", (string file, PlayerSettings player, HttpContext context) =>
+{
+    context.Response.Headers.XContentTypeOptions = "nosniff";
+    return player.FindMedia(file) is string path
+        ? Results.File(path, PlayerSettings.MimeType(Path.GetExtension(file)), enableRangeProcessing: true)
+        : Results.NotFound();
+});
 app.Run();
