@@ -4,9 +4,8 @@
 @{
     Layout = "_ManagementLayout";
     ViewData["Title"] = "工程設定";
-    const int defaultCoordinate = 50;
-    int initialX = Model.Selected?.X ?? defaultCoordinate;
-    int initialY = Model.Selected?.Y ?? defaultCoordinate;
+    int initialX = Model.Selected?.X ?? WebAccess.Media.PointPlan.DefaultCoordinate;
+    int initialY = Model.Selected?.Y ?? WebAccess.Media.PointPlan.DefaultCoordinate;
 }
 
 @section Actions {
@@ -232,7 +231,6 @@
                 <form id="point-form" method="post" asp-page-handler="Save" enctype="multipart/form-data">
                     <input id="point-revision" name="revision" type="hidden" value="@Model.Revision">
                     <input name="isNew" type="hidden" value="@(Model.Selected is null ? "true" : "false")">
-                    <input type="hidden" name="suggestedAlarmText" id="suggested-alarm-text">
                     <details open>
                         <summary>測點與底圖</summary>
                         <div>
@@ -261,54 +259,57 @@
                             </label>
                         </div>
                     </details>
-                    <details>
-                        <summary>警報文字</summary>
-                        <div>
-                            <label>自訂文字
-                                <textarea name="alarmText" id="alarm-text" rows="2" maxlength="500" placeholder="留空時使用 WebAccess 回傳的警報文字">@Model.Selected?.AlarmText</textarea>
-                                <small>預設帶入測點描述。修改後才會覆寫 API 警報文字。</small>
-                            </label>
-                            <label>文字大小（px）
-                                <input name="alarmTextSize" id="alarm-text-size" type="number" required
-                                       min="@WebAccess.Media.PointPlan.MinAlarmTextSize" max="@WebAccess.Media.PointPlan.MaxAlarmTextSize"
-                                       value="@(Model.Selected?.AlarmTextSize ?? WebAccess.Media.PointPlan.DefaultAlarmTextSize)">
-                            </label>
-                        </div>
-                    </details>
-                    <details>
-                        <summary>圖示與位置</summary>
-                        <div>
-                            <div class="coordinates">
-                                <label>水平位置 % <input id="x" name="x" type="number" min="0" max="100" value="@initialX" required></label>
-                                <label>垂直位置 % <input id="y" name="y" type="number" min="0" max="100" value="@initialY" required></label>
+                    <fieldset id="alarm-options" hidden="@(Model.Selected?.ImageOnly ?? false)" disabled="@(Model.Selected?.ImageOnly ?? false)">
+                        <input type="hidden" name="suggestedAlarmText" id="suggested-alarm-text">
+                        <details>
+                            <summary>警報文字</summary>
+                            <div>
+                                <label>自訂文字
+                                    <textarea name="alarmText" id="alarm-text" rows="2" maxlength="500" placeholder="留空時使用 WebAccess 回傳的警報文字">@Model.Selected?.AlarmText</textarea>
+                                    <small>預設帶入測點描述。修改後才會覆寫 API 警報文字。</small>
+                                </label>
+                                <label>文字大小（px）
+                                    <input name="alarmTextSize" id="alarm-text-size" type="number" required
+                                           min="@WebAccess.Media.PointPlan.MinAlarmTextSize" max="@WebAccess.Media.PointPlan.MaxAlarmTextSize"
+                                           value="@(Model.Selected?.AlarmTextSize ?? WebAccess.Media.PointPlan.DefaultAlarmTextSize)">
+                                </label>
                             </div>
-                            <label>圖示大小（px）
-                                <input name="iconSize" id="icon-size" type="number" required
-                                       min="@WebAccess.Media.PointPlan.MinIconSize" max="@WebAccess.Media.PointPlan.MaxIconSize"
-                                       value="@(Model.Selected?.IconSize ?? WebAccess.Media.PointPlan.DefaultIconSize)">
-                            </label>
-                            <fieldset>
-                                <legend>圖示樣式</legend>
-                                <div class="icon-grid">
-                                    @foreach ((string value, string label) in WebAccess.Media.Pages.PointsModel.AlarmIcons)
-                                    {
-                                        <label class="icon-option">
-                                            <input type="radio" name="icon" value="@value" checked="@((Model.Selected?.Icon ?? WebAccess.Media.PointPlan.DefaultIcon) == value)">
-                                            @if (value != "custom")
-                                            {
-                                                <span class="alarm-icon" data-icon="@value" aria-hidden="true"></span>
-                                            }
-                                            @label
-                                        </label>
-                                    }
+                        </details>
+                        <details>
+                            <summary>圖示與位置</summary>
+                            <div>
+                                <div class="coordinates">
+                                    <label>水平位置 % <input id="x" name="x" type="number" min="0" max="100" value="@initialX" required></label>
+                                    <label>垂直位置 % <input id="y" name="y" type="number" min="0" max="100" value="@initialY" required></label>
                                 </div>
-                            </fieldset>
-                            <label id="custom-icon-field" hidden="@(Model.Selected?.Icon != "custom")">上傳 PNG / JPEG 圖示
-                                <input name="customIcon" id="custom-icon" type="file" accept=".png,.jpg,.jpeg" data-existing="@Model.Selected?.IconFile">
-                            </label>
-                            <label class="check"><input type="checkbox" name="flash" id="flash" value="true" checked="@(Model.Selected?.Flash ?? true)">閃爍警報圖示</label>
-                        </div>
-                    </details>
+                                <label>圖示大小（px）
+                                    <input name="iconSize" id="icon-size" type="number" required
+                                           min="@WebAccess.Media.PointPlan.MinIconSize" max="@WebAccess.Media.PointPlan.MaxIconSize"
+                                           value="@(Model.Selected?.IconSize ?? WebAccess.Media.PointPlan.DefaultIconSize)">
+                                </label>
+                                <fieldset>
+                                    <legend>圖示樣式</legend>
+                                    <div class="icon-grid">
+                                        @foreach ((string value, string label) in WebAccess.Media.Pages.PointsModel.AlarmIcons)
+                                        {
+                                            <label class="icon-option">
+                                                <input type="radio" name="icon" value="@value" checked="@((Model.Selected?.Icon ?? WebAccess.Media.PointPlan.DefaultIcon) == value)">
+                                                @if (value != "custom")
+                                                {
+                                                    <span class="alarm-icon" data-icon="@value" aria-hidden="true"></span>
+                                                }
+                                                @label
+                                            </label>
+                                        }
+                                    </div>
+                                </fieldset>
+                                <label id="custom-icon-field" hidden="@(Model.Selected?.Icon != "custom")">上傳 PNG / JPEG 圖示
+                                    <input name="customIcon" id="custom-icon" type="file" accept=".png,.jpg,.jpeg" data-existing="@Model.Selected?.IconFile">
+                                </label>
+                                <label class="check"><input type="checkbox" name="flash" id="flash" value="true" checked="@(Model.Selected?.Flash ?? true)">閃爍警報圖示</label>
+                            </div>
+                        </details>
+                    </fieldset>
                 </form>
                 @if (Model.Selected is WebAccess.Media.PointPlan current)
                 {
@@ -405,6 +406,7 @@ const simulationImage = document.getElementById('simulation-image');
 const markerImage = document.getElementById('marker-image');
 const customIcon = document.getElementById('custom-icon');
 const imageOnly = document.getElementById('image-only');
+const alarmOptions = document.getElementById('alarm-options');
 const x = document.getElementById('x');
 const y = document.getElementById('y');
 let temporaryImage = null;
@@ -447,6 +449,8 @@ function updatePositionHint() {
 function updateIcon() {
     const icon = document.querySelector('input[name=icon]:checked').value;
     const isCustom = icon === 'custom';
+    alarmOptions.hidden = imageOnly.checked;
+    alarmOptions.disabled = imageOnly.checked;
     marker.dataset.icon = icon;
     marker.dataset.flash = document.getElementById('flash').checked;
     marker.style.setProperty('--icon-size', previewSize(iconSize));
