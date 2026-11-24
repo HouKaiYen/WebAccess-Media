@@ -11,6 +11,8 @@ public sealed class AlarmAppearanceSteps : IDisposable
     private PointPlan? _plan;
     private string? _file;
     private Alarm? _alarm;
+    private string? _suggested;
+    private string? _override;
 
     [Given("載入沒有圖示欄位的測點設定")]
     public void GivenLegacyPlan() =>
@@ -64,6 +66,21 @@ public sealed class AlarmAppearanceSteps : IDisposable
     [Then("顯示 API 警報文字「(.*)」")]
     public void ThenApiText(string text) =>
         Assert.That(AlarmDisplay.SelectRegistered([_alarm!], [_plan!]).Alarm?.Description, Is.EqualTo(text));
+
+    [Given("自動帶入測點描述「(.*)」")]
+    public void GivenSuggestedText(string text) => _suggested = text;
+
+    [When("保留帶入的文字儲存")]
+    public void WhenSaveSuggestion() => _override = AlarmDisplay.ResolveTextOverride(_suggested, _suggested);
+
+    [Then("設定維持使用 API 描述")]
+    public void ThenNoOverride() => Assert.That(_override, Is.Null);
+
+    [When("改為「(.*)」後儲存")]
+    public void WhenSaveEditedText(string text) => _override = AlarmDisplay.ResolveTextOverride(text, _suggested);
+
+    [Then("儲存為自訂文字「(.*)」")]
+    public void ThenOverrideSaved(string text) => Assert.That(_override, Is.EqualTo(text));
 
     public void Dispose() => _directory.Delete(recursive: true);
 }
