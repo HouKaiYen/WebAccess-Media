@@ -10,7 +10,7 @@
     <style>
         * { box-sizing: border-box; }
         body { margin: 0; background: #101923; color: #eef4fa; font: 1rem/1.55 system-ui, sans-serif; }
-        header { border-bottom: 1px solid #334858; }
+        header { position: sticky; top: 0; z-index: 1; background: #14202b; border-bottom: 1px solid #334858; }
         nav, main { max-width: 960px; margin: auto; padding: 1.25rem; }
         nav, .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
         nav strong, .toolbar h2 { margin-right: auto; }
@@ -25,12 +25,25 @@
         .primary { color: #101923; background: #a5e1eb; font-weight: 650; }
         .feedback { color: #ffc47a; }
         .thumb { width: 76px; height: 48px; object-fit: contain; }
+        [hidden] { display: none !important; }
+        .options { display: grid; grid-template-columns: minmax(180px, 1fr) 2fr; gap: 1rem; }
+        .muted { color: #b7c9d7; }
+        dialog { width: min(92vw, 880px); background: #111b26; color: inherit; border: 1px solid #4a6376; border-radius: .6rem; padding: 1rem; }
+        dialog::backdrop { background: #060b13cc; }
+        .preview { position: relative; height: min(55vh, 480px); display: grid; place-items: center; background: #05090e; overflow: hidden; }
+        .preview img, .preview video { max-width: 100%; max-height: 100%; }
+        #preview-media { display: grid; place-items: center; width: 100%; height: 100%; overflow: hidden; }
+        #preview-marquee { position: absolute; inset-inline: 0; bottom: 0; background: #0d151edb; white-space: nowrap; overflow: hidden; }
+        #preview-marquee.top { top: 0; bottom: auto; }
+        #preview-marquee span { display: inline-block; padding-left: 100%; animation: preview-scroll 12s linear infinite; }
+        @@keyframes preview-scroll { to { transform: translateX(-100%); } }
+        @@media (max-width: 640px) { .options { grid-template-columns: 1fr; } header { position: static; } }
     </style>
 </head>
 <body>
-<header><nav><strong>WebAccess Media</strong><a href="/engineering">工程設定</a><a href="/display?preview=idle" target="_blank" rel="noopener">預覽待機</a><a href="/display">顯示頁</a></nav></header>
+<header><nav><strong>WebAccess Media · 日常管理</strong><a href="/engineering">工程設定</a><a href="/display">顯示頁</a><span id="draft-status" class="muted" role="status">已儲存</span><button type="submit" form="playlist-form" class="primary">儲存變更</button></nav></header>
 <main>
-    <h1>日常管理</h1>
+    <div class="toolbar"><h2>待機播放內容</h2><button id="open-preview" type="button">預覽待機畫面</button></div>
     @if (Model.Feedback is string feedback)
     {
         <p class="feedback" role="status">@feedback</p>
@@ -40,10 +53,10 @@
         <button type="submit">上傳並加入</button>
         <small>圖片與 GIF 上限 20 MB，MP4 上限 100 MB。</small>
     </form>
-    <form method="post" asp-page-handler="Save">
+    <form method="post" asp-page-handler="Save" id="playlist-form">
         <input type="hidden" asp-for="Revision">
         <section>
-            <div class="toolbar"><h2>播放清單</h2><button type="submit" class="primary">儲存變更</button></div>
+            <div class="toolbar"><h2>播放清單</h2></div>
             @if (Model.Items.Count == 0)
             {
                 <p>播放清單目前是空的。</p>
@@ -52,7 +65,7 @@
                 @for (int index = 0; index < Model.Items.Count; index++)
                 {
                     string file = Model.Items[index].File;
-                    <div class="row">
+                    <div class="row" data-file="@file">
                         <input type="hidden" name="Items.Index" value="@index">
                         <input type="hidden" asp-for="Items[index].File">
                         @if (file.EndsWith(".mp4", StringComparison.Ordinal))
@@ -64,30 +77,107 @@
                             <img class="thumb" src="/media/@file" alt="">
                         }
                         <label>名稱 <input asp-for="Items[index].Name" maxlength="200" required></label>
-                        <label>圖片秒數 <input asp-for="Items[index].Seconds" type="number" min="3" max="300" required></label>
+                        @if (file.EndsWith(".mp4", StringComparison.Ordinal))
+                        {
+                            <span class="muted">播完後切換</span><input asp-for="Items[index].Seconds" type="hidden">
+                        }
+                        else
+                        {
+                            <label>停留秒數 <input asp-for="Items[index].Seconds" type="number" min="3" max="300" required></label>
+                        }
                         <button type="button" data-move="up" aria-label="上移">↑</button>
                         <button type="button" data-move="down" aria-label="下移">↓</button>
-                        <button type="submit" name="remove" value="@file">移除</button>
+                        <button type="button" data-remove>移除</button>
                     </div>
                 }
             </div>
         </section>
-        <section><h2>影片聲音</h2><label><input asp-for="IsMuted">靜音播放</label></section>
+        <div class="options"><section><h2>影片聲音</h2><label><input asp-for="IsMuted">靜音播放</label></section>
         <section>
             <h2>跑馬燈</h2>
             <label for="Marquee">公告文字（留空停用）</label>
             <textarea asp-for="Marquee" rows="3" maxlength="500"></textarea>
             <label><input asp-for="MarqueeAtTop">顯示在上方</label>
-        </section>
+        </section></div>
     </form>
 </main>
+<dialog id="preview-dialog" aria-label="待機畫面預覽">
+    <form method="dialog" class="toolbar"><h2>待機畫面預覽</h2><button>關閉</button></form>
+    <div class="preview"><div id="preview-media"></div><div id="preview-marquee" hidden><span></span></div></div>
+</dialog>
 <script>
-document.getElementById('playlist').addEventListener('click', function (event) {
+const playlistForm = document.getElementById('playlist-form');
+const list = document.getElementById('playlist');
+let dirty = false;
+function markDirty() {
+    dirty = true;
+    document.getElementById('draft-status').textContent = '有未儲存變更';
+}
+playlistForm.addEventListener('input', markDirty);
+playlistForm.addEventListener('submit', () => { dirty = false; });
+window.addEventListener('beforeunload', event => {
+    if (!dirty) return;
+    event.preventDefault();
+    event.returnValue = '';
+});
+list.addEventListener('click', function (event) {
+    const row = event.target.closest('.row');
+    if (!row) return;
+    if (event.target.hasAttribute('data-remove')) {
+        const removed = document.createElement('input');
+        removed.type = 'hidden';
+        removed.name = 'remove';
+        removed.value = row.dataset.file;
+        playlistForm.append(removed);
+        row.hidden = true;
+        markDirty();
+        return;
+    }
     const direction = event.target.dataset.move;
     if (!direction) return;
-    const row = event.target.closest('.row');
-    if (direction === 'up' && row.previousElementSibling) this.insertBefore(row, row.previousElementSibling);
-    if (direction === 'down' && row.nextElementSibling) this.insertBefore(row.nextElementSibling, row);
+    const rows = [...list.querySelectorAll('.row:not([hidden])')];
+    const index = rows.indexOf(row);
+    if (direction === 'up' && index > 0) list.insertBefore(row, rows[index - 1]);
+    if (direction === 'down' && index < rows.length - 1) rows[index + 1].after(row);
+    markDirty();
+});
+const dialog = document.getElementById('preview-dialog');
+const stage = document.getElementById('preview-media');
+let timeout;
+document.getElementById('open-preview').addEventListener('click', () => {
+    const rows = [...list.querySelectorAll('.row:not([hidden])')];
+    const ticker = document.getElementById('preview-marquee');
+    ticker.firstElementChild.textContent = document.getElementById('Marquee').value.trim();
+    ticker.hidden = !ticker.firstElementChild.textContent;
+    ticker.classList.toggle('top', document.getElementById('MarqueeAtTop').checked);
+    function play(index) {
+        const row = rows[index];
+        const video = row.dataset.file.endsWith('.mp4');
+        const media = document.createElement(video ? 'video' : 'img');
+        const next = () => {
+            if (dialog.open && stage.firstChild === media) play((index + 1) % rows.length);
+        };
+        if (video) {
+            media.muted = document.getElementById('IsMuted').checked;
+            media.controls = true;
+            media.autoplay = true;
+            media.loop = rows.length === 1;
+            media.onended = next;
+        }
+        stage.replaceChildren(media);
+        media.src = '/media/' + encodeURIComponent(row.dataset.file);
+        if (!video && rows.length > 1) {
+            const seconds = Number(row.querySelector('input[type=number]').value);
+            timeout = setTimeout(next, Math.max(3, seconds) * 1000);
+        }
+    }
+    dialog.showModal();
+    if (rows.length) play(0);
+    else stage.textContent = '播放清單目前是空的';
+});
+dialog.addEventListener('close', () => {
+    clearTimeout(timeout);
+    stage.replaceChildren();
 });
 </script>
 </body>

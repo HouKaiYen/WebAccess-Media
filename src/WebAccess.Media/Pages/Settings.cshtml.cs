@@ -54,7 +54,7 @@ public sealed class SettingsModel(PlayerSettings storage) : PageModel
         return RedirectToPage();
     }
 
-    public IActionResult OnPostSave(string? remove)
+    public IActionResult OnPostSave(string[]? remove)
     {
         Playlist playlist = storage.Read();
         HashSet<string> knownFiles = playlist.Items.Select(item => item.File).ToHashSet(StringComparer.Ordinal);
@@ -70,7 +70,8 @@ public sealed class SettingsModel(PlayerSettings storage) : PageModel
         }
         else
         {
-            PlaylistItem[] items = Items.Where(item => item.File != remove)
+            HashSet<string> removed = (remove ?? []).ToHashSet(StringComparer.Ordinal);
+            PlaylistItem[] items = Items.Where(item => !removed.Contains(item.File))
                 .Select(item => new PlaylistItem(item.File, item.Name.Trim(), item.Seconds)).ToArray();
             Feedback = storage.Save(playlist with
             {

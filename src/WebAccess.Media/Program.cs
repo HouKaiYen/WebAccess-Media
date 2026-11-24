@@ -49,6 +49,7 @@ app.Use(async (context, next) =>
     await next(context);
 });
 app.MapRazorPages();
+app.MapGet("/engineering/points", () => Results.Redirect("/engineering"));
 app.MapGet("/", () => Results.Redirect("/display"));
 app.MapGet("/display", () =>
     Results.File(Path.Combine(AppContext.BaseDirectory, "Display.html"), "text/html; charset=utf-8"));
