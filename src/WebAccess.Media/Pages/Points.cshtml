@@ -7,36 +7,35 @@
 <link rel="stylesheet" href="/alarm-icons.css">
 <style>
     .workspace { display: grid; grid-template-columns: minmax(190px, 250px) minmax(0, 1fr); min-height: calc(100vh - 68px); }
-    aside { padding: 1rem; background: #14202b; border-right: 1px solid #304352; }
+    aside { padding: 1.15rem; background: var(--panel); border-right: 1px solid var(--line); }
     h1, h2, p { margin: 0 0 .8rem; }
-    aside h2 { font-size: 1rem; margin-top: 1rem; color: #b1c2d0; }
+    aside h2 { font-size: 1rem; margin-top: 1.15rem; }
     ul { list-style: none; margin: 0; padding: 0; }
     li a { display: block; padding: .55rem .7rem; margin: .2rem 0; border-radius: .4rem; overflow-wrap: anywhere; }
-    li a:hover, [aria-current="page"] { background: #253c4d; color: white; }
+    li a:hover, li a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
     main { padding: 1.25rem; min-width: 0; }
     .editor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 290px); gap: 1rem; }
-    .canvas { min-height: 350px; background: #080e14; border: 1px solid #304352; border-radius: .6rem; display: grid; place-items: center; padding: 1.15rem; text-align: center; }
+    .canvas { min-height: clamp(350px, 65vh, 620px); display: grid; align-self: start; place-items: center; padding: 1.15rem; text-align: center; background: radial-gradient(circle, #d9e3f1 1px, transparent 1px) 0 0 / 18px 18px, var(--panel); }
     .plan { position: relative; display: inline-block; max-width: 100%; cursor: crosshair; }
     .plan img { max-width: 100%; max-height: 66vh; display: block; }
     .marker { position: absolute; transform: translate(-50%, -50%); cursor: grab; touch-action: none; }
     .floor-grid, .icon-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; margin-bottom: .75rem; }
     .floor-card { display: grid; gap: .35rem; padding: .35rem; overflow: hidden; }
-    .floor-card img { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: #080e14; }
+    .floor-card img { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: var(--background); }
     .floor-card span { text-overflow: ellipsis; overflow: hidden; white-space: nowrap; font-size: .8rem; }
     .icon-option { display: flex; align-items: center; gap: .4rem; margin: 0; padding: .35rem; border: 1px solid var(--border); border-radius: .4rem; font-size: .85rem; }
-    .icon-option:has(:checked) { border-color: var(--accent); }
+    .icon-option:has(:checked) { border-color: var(--accent); background: var(--accent-soft); }
     .check { display: flex; align-items: center; }
     .icon-option input, .check input { width: auto; margin: 0; }
     [hidden] { display: none !important; }
-    .inspector { padding: 1rem; border: 1px solid #304352; border-radius: .6rem; background: #172634; }
+    .inspector { padding: 1rem; }
     .inspector h2 { font-size: 1.1rem; }
     label { display: grid; gap: .25rem; margin-bottom: .75rem; }
     .coordinates { display: grid; grid-template-columns: 1fr 1fr; gap: .55rem; }
-    .feedback { color: #9bdce6; }
-    .muted { color: #b1c2d0; }
+    fieldset { border: 1px solid var(--line); border-radius: .5rem; margin: .25rem 0 1rem; padding: .7rem; min-width: 0; }
     .remove { margin-top: .6rem; }
     @@media (max-width: 800px) { .editor { grid-template-columns: 1fr; } }
-    @@media (max-width: 560px) { .workspace { grid-template-columns: 1fr; } aside { border-right: 0; border-bottom: 1px solid #304352; } .canvas { min-height: 240px; } }
+    @@media (max-width: 560px) { .workspace { grid-template-columns: 1fr; } aside { border-right: 0; border-bottom: 1px solid var(--line); } .canvas { min-height: 240px; } }
 
     input { width: 100%; }
 </style>
@@ -57,6 +56,7 @@
         }
         </ul>
         <h2>共用平面圖</h2>
+        <p class="muted">一次上傳多張底圖，供各測點頁面選用。</p>
         <form method="post" asp-page-handler="UploadFloorImages" enctype="multipart/form-data">
             <input type="hidden" name="selected" value="@Model.Selected?.Point">
             <label>批次選取底圖 <input name="images" type="file" multiple accept=".png,.jpg,.jpeg" required></label>
@@ -79,7 +79,7 @@
             <p class="feedback" role="status">@feedback</p>
         }
         <div class="editor">
-            <div class="canvas">
+            <div class="canvas card">
                 <p id="empty-plan" class="muted" hidden="@(Model.Selected is not null)">上傳平面圖後，點選圖面設定告警位置。</p>
                 <div class="plan" id="plan" hidden="@(Model.Selected is null)">
                     @if (Model.Selected is WebAccess.Media.PointPlan selected)
@@ -95,7 +95,7 @@
                     </span>
                 </div>
             </div>
-            <div class="inspector">
+            <div class="inspector card">
                 <h2>測點與告警位置</h2>
                 <form method="post" asp-page-handler="Save" enctype="multipart/form-data">
                     <input name="revision" type="hidden" value="@Model.Revision">
