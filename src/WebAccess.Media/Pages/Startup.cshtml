@@ -27,6 +27,10 @@
     {
         <form class="startup-card card" id="startup-form" method="post" asp-page-handler="Save">
             <div class="startup-status muted">目前狀態：@(Model.IsEnabled ? "已開啟" : "已關閉")</div>
+            @if (Model.NeedsUpdate)
+            {
+                <p role="status">偵測到舊版或不同 Port 的排程。保持勾選並儲存，即可更新為目前的監聽位址。</p>
+            }
             <label><input type="checkbox" name="enabled" value="true" checked="@Model.IsEnabled">開機時自動啟動 WebAccess Media</label>
             <p>開機後無須登入即可監控。登入後會顯示通知區圖示。</p>
             <p>首次建立排程需要管理員授權，並在 Windows 對話框輸入目前帳號的密碼。</p>

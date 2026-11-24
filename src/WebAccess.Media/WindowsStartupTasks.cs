@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
+using System.Security.Principal;
 using System.Text;
 
 namespace WebAccess.Media;
@@ -17,13 +18,16 @@ internal sealed class WindowsStartupTasks(string executable, string storage, str
     private const int TaskTriggerLogon = 9;
     private const int TaskActionExec = 0;
     private const int FileNotFound = unchecked((int)0x80070002);
+    private const string BootTaskPrefix = "WebAccess Media - 開機監控 (";
+    private const string TrayTaskPrefix = "WebAccess Media - 登入通知區 (";
 
-    public string InstanceId { get; } = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
-        $"{executable.ToUpperInvariant()}|{userSid}|{localAddress.Port.ToString(CultureInfo.InvariantCulture)}")))[..16];
+    public string InstanceId { get; } = HashId(
+        $"{executable.ToUpperInvariant()}|{userSid}|{localAddress.Port.ToString(CultureInfo.InvariantCulture)}");
     public string ShutdownEvent => $@"Global\WebAccess.Media.Startup.{InstanceId}";
     public string TrayExecutable => Path.Combine(Path.GetDirectoryName(executable)!, "tray", "WebAccess.Media.Tray.exe");
-    private string BootTask => $"WebAccess Media - 開機監控 ({InstanceId})";
-    private string TrayTask => $"WebAccess Media - 登入通知區 ({InstanceId})";
+    private string ScheduleId { get; } = HashId($"{executable.ToUpperInvariant()}|{userSid}");
+    private string BootTask => $"{BootTaskPrefix}{ScheduleId})";
+    private string TrayTask => $"{TrayTaskPrefix}{ScheduleId})";
     private string BootArguments => $"--urls {Quote(urls)} --Storage:Directory {Quote(storage)} --Startup:Background true";
     private string TrayArguments => $"--watch-startup \"{localAddress.AbsoluteUri}\" {InstanceId}";
 
@@ -38,12 +42,15 @@ internal sealed class WindowsStartupTasks(string executable, string storage, str
         return start;
     }
 
-    public bool IsEnabled()
+    public (bool IsEnabled, bool NeedsUpdate) ReadState()
     {
         dynamic folder = Connect();
         dynamic? background = FindTask(folder, BootTask);
         dynamic? tray = FindTask(folder, TrayTask);
-        return background is not null && tray is not null && (bool)background.Enabled && (bool)tray.Enabled;
+        bool currentEnabled = background is not null && tray is not null && (bool)background.Enabled && (bool)tray.Enabled;
+        bool legacyEnabled = FindLegacyTasks((object)folder).Any(IsTaskEnabled);
+        bool needsUpdate = legacyEnabled || (currentEnabled && !MatchesCurrentActions(background!, tray!));
+        return (currentEnabled || legacyEnabled, needsUpdate);
     }
 
     public bool TrySetEnabled(bool enabled)
@@ -57,22 +64,12 @@ internal sealed class WindowsStartupTasks(string executable, string storage, str
             {
                 return false;
             }
-            if (!MatchesAction(background, executable, BootArguments) || !MatchesAction(tray, TrayExecutable, TrayArguments))
+            if (!MatchesCurrentActions(background, tray))
             {
                 return false;
             }
         }
-        bool previousTray = tray is not null && (bool)tray.Enabled;
-        try
-        {
-            if (tray is not null) tray.Enabled = enabled;
-            if (background is not null) background.Enabled = enabled;
-        }
-        catch
-        {
-            if (tray is not null) tray.Enabled = previousTray;
-            throw;
-        }
+        ApplyEnabledState(folder, background, tray, enabled);
         return true;
     }
 
@@ -88,20 +85,80 @@ internal sealed class WindowsStartupTasks(string executable, string storage, str
         string acl = $"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;{userSid})";
         dynamic background = folder.RegisterTaskDefinition(BootTask, boot, TaskCreateOrUpdate, account, password,
             TaskLogonPassword, acl);
-        dynamic? tray = null;
+        dynamic tray = folder.RegisterTaskDefinition(TrayTask, logon, TaskCreateOrUpdate, userSid, null,
+            TaskLogonInteractiveToken, acl);
+        ApplyEnabledState(folder, background, tray, enabled: true);
+    }
+
+    private void ApplyEnabledState(dynamic folder, object? background, object? tray, bool enabled)
+    {
+        List<(object Task, bool Enabled)> changes = FindLegacyTasks((object)folder).Select(task => (Task: task, Enabled: false)).ToList();
+        if (tray is not null) changes.Add((tray, enabled));
+        if (background is not null) changes.Add((background, enabled));
+
+        Stack<(object Task, bool Enabled)> applied = new();
         try
         {
-            tray = folder.RegisterTaskDefinition(TrayTask, logon, TaskCreateOrUpdate, userSid, null,
-                TaskLogonInteractiveToken, acl);
-            tray.Enabled = true;
-            background.Enabled = true;
+            foreach ((object task, bool desired) in changes)
+            {
+                bool previous = IsTaskEnabled(task);
+                if (previous == desired) continue;
+                ((dynamic)task).Enabled = desired;
+                applied.Push((task, previous));
+            }
         }
         catch
         {
-            if (tray is not null) tray.Enabled = false;
+            foreach ((object task, bool previous) in applied) ((dynamic)task).Enabled = previous;
             throw;
         }
     }
+
+    private IEnumerable<object> FindLegacyTasks(dynamic folder)
+    {
+        foreach (dynamic task in folder.GetTasks(1))
+        {
+            string name = task.Name;
+            string? path = name.StartsWith(BootTaskPrefix, StringComparison.Ordinal) && name != BootTask ? executable
+                : name.StartsWith(TrayTaskPrefix, StringComparison.Ordinal) && name != TrayTask ? TrayExecutable : null;
+            if (path is null || !name.EndsWith(')') || name.Length - name.LastIndexOf('(') != 18 ||
+                !name.Substring(name.Length - 17, 16).All(Uri.IsHexDigit))
+            {
+                continue;
+            }
+
+            dynamic definition = task.Definition;
+            if ((int)definition.Actions.Count != 1)
+            {
+                continue;
+            }
+            dynamic action = definition.Actions.Item(1);
+            if ((int)action.Type == TaskActionExec && string.Equals((string)action.Path, path, StringComparison.OrdinalIgnoreCase) &&
+                IsCurrentAccount((string)definition.Principal.UserId))
+            {
+                yield return task;
+            }
+        }
+    }
+
+    private bool IsCurrentAccount(string account)
+    {
+        if (string.Equals(account, userSid, StringComparison.OrdinalIgnoreCase)) return true;
+        try
+        {
+            return new NTAccount(account).Translate(typeof(SecurityIdentifier)).Value == userSid;
+        }
+        catch (Exception error) when (error is IdentityNotMappedException or ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    private bool MatchesCurrentActions(dynamic background, dynamic tray) =>
+        MatchesAction(background, executable, BootArguments) && MatchesAction(tray, TrayExecutable, TrayArguments);
+
+    private static bool IsTaskEnabled(object task) => (bool)((dynamic)task).Enabled;
+    private static string HashId(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)))[..16];
 
     private static dynamic CreateDefinition(dynamic service, int trigger, string path, string arguments)
     {

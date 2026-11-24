@@ -12,6 +12,7 @@ public sealed class StartupModel(IServer server, IConfiguration configuration, I
 {
     public bool IsAvailable { get; private set; }
     public bool IsEnabled { get; private set; }
+    public bool NeedsUpdate { get; private set; }
     [TempData] public string? Feedback { get; set; }
 
     public void OnGet()
@@ -26,7 +27,7 @@ public sealed class StartupModel(IServer server, IConfiguration configuration, I
                 server.Features.Get<IServerAddressesFeature>()?.Addresses ?? [], configuration["Storage:Directory"]!);
             if (tasks is not null && System.IO.File.Exists(tasks.TrayExecutable))
             {
-                IsEnabled = tasks.IsEnabled();
+                (IsEnabled, NeedsUpdate) = tasks.ReadState();
                 IsAvailable = true;
             }
         }
@@ -55,7 +56,7 @@ public sealed class StartupModel(IServer server, IConfiguration configuration, I
             {
                 Feedback = enabled ? "已開啟開機自動啟動。" : "已關閉開機自動啟動。目前的監控會繼續執行。";
             }
-            else if (!Environment.UserInteractive)
+            else if (!Environment.UserInteractive || configuration.GetValue<bool>("Startup:Background"))
             {
                 Feedback = "建立或更新排程需要 Windows 桌面。請在本機桌面啟動可攜版後再設定。";
             }
