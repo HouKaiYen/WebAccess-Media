@@ -23,6 +23,9 @@
     ul { list-style: none; margin: 0; padding: 0; }
     li a { display: block; padding: .55rem .7rem; margin: .2rem 0; border-radius: .4rem; overflow-wrap: anywhere; }
     li a:hover, li a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
+    .point-row { display: flex; align-items: center; gap: .25rem; }
+    .point-row a { flex: 1; min-width: 0; }
+    .point-row button { padding: .2rem .45rem; color: #a42c3e; font-size: .8rem; white-space: nowrap; }
     main { padding: 1.25rem; min-width: 0; }
     .editor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 290px); gap: 1rem; }
     .canvas { min-height: clamp(350px, 65vh, 620px); display: grid; align-self: start; place-items: center; padding: 1.15rem; text-align: center; background: radial-gradient(circle, #d9e3f1 1px, transparent 1px) 0 0 / 18px 18px, var(--panel); }
@@ -88,10 +91,16 @@
         {
             <p class="muted">尚未建立測點頁面</p>
         }
-        <ul>
+        <ul id="point-list">
         @foreach (WebAccess.Media.PointPlan plan in Model.Plans)
         {
-            <li><a asp-page="Points" asp-route-selected="@plan.Point" aria-current="@(Model.Selected?.Point == plan.Point ? "page" : null)">@plan.Point</a></li>
+            <li class="point-row">
+                <a asp-page="Points" asp-route-selected="@plan.Point" aria-current="@(Model.Selected?.Point == plan.Point ? "page" : null)">@plan.Point</a>
+                <form method="post" asp-page-handler="Remove" asp-route-selected="@Model.Selected?.Point"
+                      asp-route-add="@(Model.Selected is null)" data-remove-point="@plan.Point">
+                    <button type="submit" name="point" value="@plan.Point" aria-label="刪除測點 @plan.Point">刪除</button>
+                </form>
+            </li>
         }
         </ul>
         <h2>共用平面圖</h2>
@@ -246,6 +255,10 @@
     </dialog>
 }
 <script>
+document.getElementById('point-list').addEventListener('submit', event => {
+    const pointName = event.target.dataset.removePoint;
+    if (pointName && !window.confirm('確定要刪除測點「' + pointName + '」？')) event.preventDefault();
+});
 const image = document.getElementById('image');
 const previewGroup = document.getElementById('alarm-preview-group');
 const previewText = document.getElementById('alarm-preview');

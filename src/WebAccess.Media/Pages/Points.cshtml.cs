@@ -230,13 +230,13 @@ public sealed class PointsModel(
         (playlist.FloorImages ?? []).Concat((playlist.PointPlans ?? []).Select(plan => new FloorImage(plan.File, plan.Point)))
             .DistinctBy(image => image.File).ToArray();
 
-    public IActionResult OnPostRemove(string point)
+    public IActionResult OnPostRemove(string point, string? selected, bool add = false)
     {
         Playlist playlist = storage.Read();
         Feedback = storage.Save(playlist with
         {
             PointPlans = (playlist.PointPlans ?? []).Where(plan => plan.Point != point).ToArray()
         }) ? "已移除測點平面圖。" : "設定已更新，請再試一次。";
-        return RedirectToPage();
+        return RedirectToPage(new { selected = selected == point ? null : selected, add });
     }
 }
