@@ -1,4 +1,5 @@
 using System.Net;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using NUnit.Framework;
 using Reqnroll;
@@ -21,7 +22,12 @@ public sealed class WebAccessSteps
                 ["WebAccess:Password"] = "mock",
                 ["FloorPlans:A"] = "/a.png"
             }).Build();
-        _monitor = new WebAccessAlarmMonitor(new HttpClient(_handler), configuration);
+        WebAccessClient client = new(new HttpClient(_handler), configuration);
+        EngineeringSettings settings = new(
+            Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
+            new EphemeralDataProtectionProvider().CreateProtector("test"),
+            client);
+        _monitor = new WebAccessAlarmMonitor(client, settings, configuration);
     }
 
     [Given("WebAccess 已回報測點 A 的告警")]

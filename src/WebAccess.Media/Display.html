@@ -28,7 +28,7 @@ async function refresh() {
     plan.hidden = !url;
     if (url && plan.getAttribute('src') !== url) plan.src = url;
     const lastSuccess = state.lastSuccessAt ? '，最後更新 ' + new Date(state.lastSuccessAt).toLocaleString('zh-TW') : '';
-    const messages = { disconnected: 'WebAccess 連線異常' + lastSuccess, connecting: '正在連線至 WebAccess', unconfigured: 'WebAccess 連線設定不完整' };
+    const messages = { disconnected: 'WebAccess 連線異常' + lastSuccess, connecting: '正在連線至 WebAccess', unconfigured: '尚未設定 WebAccess' };
     status.textContent = messages[state.connectionStatus] || '';
   } catch {
     status.textContent = '顯示服務連線中斷';
