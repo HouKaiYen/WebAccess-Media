@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>@ViewData["Title"] · WebAccess Media</title>
+    <link rel="stylesheet" href="/typography.css">
+    <link rel="stylesheet" href="/management.css">
+    @await RenderSectionAsync("Styles", required: false)
+</head>
+<body>
+    <a class="skip-link" href="#main-content">跳至主要內容</a>
+    <header class="management-header">
+        <div class="management-header-inner">
+            <a class="brand" href="/settings"><span class="brand-mark" aria-hidden="true"></span>WebAccess Media</a>
+            <nav aria-label="管理導覽">
+                <a href="/settings" aria-current="@(Context.Request.Path == "/settings" ? "page" : null)">日常管理</a>
+                <a href="/engineering" aria-current="@(Context.Request.Path == "/engineering" ? "page" : null)">工程設定</a>
+                <a href="/engineering/connection" aria-current="@(Context.Request.Path == "/engineering/connection" ? "page" : null)">WebAccess 連線</a>
+                <a href="/display">顯示頁</a>
+            </nav>
+            <div class="management-actions">
+                @await RenderSectionAsync("Actions", required: false)
+            </div>
+        </div>
+    </header>
+    @RenderBody()
+</body>
+</html>

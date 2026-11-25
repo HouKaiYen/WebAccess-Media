@@ -1,0 +1,502 @@
+@page "/settings"
+@model WebAccess.Media.Pages.SettingsModel
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@{ Layout = "_ManagementLayout"; ViewData["Title"] = "日常管理"; }
+
+@section Styles {
+<link rel="stylesheet" href="/marquee.css">
+<style>
+        .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+        .toolbar h2 { margin-right: auto; }
+        nav, .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
+        section { padding: 1.25rem 1.4rem; margin-bottom: 1rem; }
+        .intro { margin: .25rem 0 1.4rem; }
+        .intro > div, .section-heading > div { margin-right: auto; }
+        .section-heading { align-items: flex-end; }
+        .intro h1 { margin: 0; font-size: 1.5rem; }
+        .intro p, .section-heading p { margin: .25rem 0 0; color: var(--muted); }
+        .section-heading h2, .options h2 { margin: 0; font-size: 1rem; }
+        .count { border-radius: 1rem; padding: .1rem .45rem; background: var(--accent-soft); color: var(--accent); font-size: .8rem; }
+        .file-note { border-radius: .4rem; padding: .55rem .75rem; background: #f4f6fa; color: var(--muted); }
+        .empty { min-height: 155px; display: grid; place-content: center; gap: .35rem; text-align: center; color: var(--muted); }
+        .empty strong { color: var(--text); }
+        .row { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; padding: .75rem 0; border-top: 1px solid var(--line); }
+        label { display: inline-flex; align-items: center; gap: .5rem; }
+        input[type=number] { width: 5.5rem; }
+        textarea { width: 100%; margin: .5rem 0; }
+        .thumb { width: 76px; height: 48px; object-fit: contain; }
+        [hidden] { display: none !important; }
+        .options { display: grid; grid-template-columns: minmax(180px, .85fr) minmax(0, 1.15fr); align-items: start; gap: 1rem; }
+        .options h2 { margin-bottom: .75rem; }
+        .marquee-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .75rem; }
+        .marquee-heading h2 { margin: 0; }
+        .marquee-heading .switch { min-height: 2.75rem; cursor: pointer; }
+        .marquee-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+        .marquee-field { display: grid; gap: .3rem; min-width: 0; }
+        .marquee-field input[type=number], .marquee-field select { width: 100%; min-width: 0; }
+        .marquee-field input[type=color] { width: 100%; min-height: 2.5rem; padding: .3rem; cursor: pointer; }
+        .marquee-appearance { margin-top: .95rem; border-top: 1px solid var(--line); }
+        .marquee-appearance summary { padding: .65rem 0; font-weight: 600; cursor: pointer; }
+        .marquee-appearance summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .marquee-appearance h3 { margin: .25rem 0 .35rem; font-size: .95rem; }
+        .marquee-appearance p { margin: 0 0 .65rem; }
+        .marquee-background { margin-top: 1rem; padding-top: .65rem; border-top: 1px solid var(--line); }
+        .marquee-editor { margin: .5rem 0 .8rem; }
+        .marquee-text-surface { background: #101923; border-radius: .4rem; }
+        .marquee-rich-text {
+            min-height: 5rem; max-height: 14rem; overflow: auto; padding: .55rem .65rem; border: 1px solid var(--border);
+            border-radius: .4rem; line-height: 1.35; white-space: pre-wrap; overflow-wrap: anywhere; cursor: text;
+        }
+        .marquee-rich-text:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .marquee-rich-text:empty::before { content: attr(aria-placeholder); font-size: .92rem; color: #cbd5e1; pointer-events: none; }
+        .marquee-rich-text::selection, .marquee-rich-text span::selection { background: #2c5dc980; }
+        .marquee-rich-text::highlight(marquee-selection) { background: #2c5dc980; }
+        .marquee-editor-status { margin: .45rem 0; }
+        .marquee-range-tools {
+            display: flex; flex-wrap: wrap; align-items: start; gap: .5rem; min-width: 0; margin: 0; padding: 0; border: 0;
+        }
+        .marquee-range-tools label { display: grid; gap: .25rem; }
+        .marquee-range-tools input[type=color] { width: 3.2rem; min-height: 2.4rem; padding: .25rem; }
+        .marquee-range-tools input[type=number] { width: 6.5rem; }
+        .marquee-range-tools legend { padding: 0 0 .35rem; font-weight: 600; }
+        .marquee-range-color { display: grid; gap: .25rem; min-width: 4.5rem; }
+        .marquee-range-color-status { display: block; min-height: 1.2rem; font-size: .78rem; }
+        .marquee-range-actions { display: flex; flex: 1 0 100%; flex-wrap: wrap; gap: .45rem; }
+        .marquee-range-help { display: block; margin: .4rem 0 0; }
+        .marquee-range-tools:disabled { opacity: .75; }
+        .switch input { appearance: none; width: 2.1rem; height: 1.16rem; padding: 0; border: 0; border-radius: 2rem; background: #cdd6e5; cursor: pointer; }
+        .switch input::before { display: block; width: .83rem; height: .83rem; margin: .165rem; border-radius: 50%; background: #fff; content: ""; }
+        .switch input:checked { background: var(--accent); }
+        .switch input:checked::before { transform: translateX(.95rem); }
+        dialog { width: min(92vw, 880px); background: var(--panel); color: inherit; border: 1px solid var(--border); border-radius: .6rem; padding: 1rem; }
+        dialog::backdrop { background: #060b13cc; }
+        .media-list { display: grid; gap: .5rem; max-height: min(52vh, 28rem); overflow: auto; margin: .75rem 0 0; padding: .25rem; list-style: none; }
+        .media-entry { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; padding: .55rem; border: 1px solid var(--line); border-radius: .4rem; }
+        .media-entry .thumb { width: 56px; height: 36px; border-radius: .25rem; background: var(--background); }
+        .media-type { display: grid; place-items: center; color: var(--muted); }
+        .media-name { flex: 1 1 8rem; overflow-wrap: anywhere; }
+        .media-actions { display: flex; flex-wrap: wrap; gap: .35rem; margin-left: auto; }
+        .media-actions button:disabled { cursor: default; }
+        .media-actions [data-delete] { color: #a42c3e; }
+        .preview { position: relative; height: min(55vh, 480px); display: grid; place-items: center; background: #05090e; overflow: hidden; }
+        .preview img, .preview video { max-width: 100%; max-height: 100%; object-fit: contain; }
+        #preview-media {
+            position: absolute; inset: var(--marquee-top-height, 0px) 0 var(--marquee-bottom-height, 0px);
+            display: flex; align-items: center; justify-content: center; overflow: hidden;
+        }
+        @@media (max-width: 640px) { .options { grid-template-columns: 1fr; } header { position: static; } }
+        @@media (max-width: 420px) { .marquee-fields { grid-template-columns: 1fr; } }
+
+        main { max-width: 1100px; margin: auto; padding: 1.25rem; }
+</style>
+}
+@section Actions { <button id="save-playlist" type="submit" form="playlist-form" class="primary">儲存設定</button> }
+<main id="main-content" tabindex="-1">
+    <div class="intro toolbar">
+        <div><h1>管理待機播放內容</h1><p>新增圖片或影片，設定播放順序與圖片停留時間。</p></div>
+        <span id="draft-status" class="muted" role="status">已儲存</span>
+        <button id="open-preview" type="button">▷ 預覽待機畫面</button>
+    </div>
+    @if (Model.Feedback is string feedback)
+    {
+        <p class="feedback" role="status">@feedback</p>
+    }
+    <form id="upload-form" method="post" asp-page-handler="Upload" enctype="multipart/form-data"></form>
+    <form method="post" asp-page-handler="Save" id="playlist-form">
+        <input type="hidden" asp-for="Revision">
+        <section class="card">
+            <div class="section-heading toolbar">
+                <div><h2>播放清單 <span class="count" id="playlist-count">@Model.Items.Count</span></h2><p>圖片依序循環播放，影片播完後切換。</p></div>
+                <input form="upload-form" id="upload-media" type="file" name="media" aria-label="新增媒體檔案" accept=".png,.jpg,.jpeg,.gif,.mp4" hidden>
+                <button type="button" id="open-media-library" aria-haspopup="dialog">從現有媒體選取</button>
+                <button type="button" id="choose-media">＋ 上傳新媒體</button>
+            </div>
+            <p class="file-note">支援 PNG、JPEG、GIF、MP4。圖片與 GIF 上限 20 MB，MP4 上限 100 MB。從播放清單移除的媒體仍可在「現有媒體」重新選取。</p>
+            <p class="feedback" id="upload-status" role="status" hidden></p>
+            <div id="playlist-empty" class="empty" hidden="@(Model.Items.Count > 0)"><strong>播放清單目前是空的</strong><span>新增媒體後，待機畫面會依序循環播放。</span></div>
+            <div id="playlist">
+                @for (int index = 0; index < Model.Items.Count; index++)
+                {
+                    @await Html.PartialAsync("_PlaylistItemRow", (index, Model.Items[index]))
+                }
+            </div>
+        </section>
+        <div class="options"><section class="card"><h2>影片聲音</h2><label class="switch"><input asp-for="IsMuted">靜音播放</label></section>
+        <section class="card">
+            <div class="marquee-heading">
+                <h2>跑馬燈</h2>
+                <label class="switch">
+                    <input id="MarqueeEnabled" name="MarqueeEnabled" type="checkbox" role="switch" value="true" checked="@(Model.MarqueeEnabled == true)">
+                    啟用跑馬燈
+                </label>
+                <input type="hidden" name="MarqueeEnabled" value="false">
+            </div>
+            <label for="Marquee" id="marquee-text-label">公告文字</label>
+            <textarea asp-for="Marquee" rows="3" maxlength="500"></textarea>
+            <div id="marquee-editor" class="marquee-editor" hidden>
+                <div class="marquee-text-surface">
+                    <div id="marquee-rich-text" class="marquee-rich-text" contenteditable="plaintext-only"
+                         role="textbox" aria-multiline="true" aria-labelledby="marquee-text-label"
+                         aria-describedby="marquee-editor-status" aria-placeholder="輸入公告文字"></div>
+                </div>
+                <p id="marquee-editor-status" class="marquee-editor-status muted" role="status">反白選取要調整的文字。</p>
+                <fieldset class="marquee-range-tools" id="marquee-range-tools" aria-describedby="marquee-range-help" disabled>
+                    <legend>選取範圍的格式</legend>
+                    <div class="marquee-range-color">
+                        <label for="marquee-range-color">文字顏色</label>
+                        <input id="marquee-range-color" type="color" aria-describedby="marquee-range-color-status">
+                        <small id="marquee-range-color-status" class="marquee-range-color-status"></small>
+                    </div>
+                    <label>文字大小（像素）
+                        <input id="marquee-range-size" type="number" min="@WebAccess.Media.Playlist.MinMarqueeFontSize"
+                               max="@WebAccess.Media.Playlist.MaxMarqueeFontSize" placeholder="沿用全文">
+                    </label>
+                    <label>字重
+                        <select id="marquee-range-weight">
+                            <option value="mixed" disabled>混合</option>
+                            <option value="">沿用全文</option>
+                            <option value="400">一般</option>
+                            <option value="600">半粗體</option>
+                            <option value="700">粗體</option>
+                        </select>
+                    </label>
+                    <div class="marquee-range-actions">
+                        <button type="button" id="reset-marquee-range">清除格式</button>
+                    </div>
+                </fieldset>
+                <small id="marquee-range-help" class="marquee-range-help">清除格式後，選取的文字會跟隨下方的全文預設。</small>
+            </div>
+            <input asp-for="MarqueeCharacterStyles" type="hidden">
+            <div class="marquee-fields">
+                <div class="marquee-field">
+                    <label asp-for="MarqueeAtTop">顯示位置</label>
+                    <select asp-for="MarqueeAtTop">
+                        <option value="False">畫面下方</option>
+                        <option value="True">畫面上方</option>
+                    </select>
+                </div>
+                <div class="marquee-field">
+                    <label asp-for="MarqueeSpeed">移動速度（像素／秒）</label>
+                    <input asp-for="MarqueeSpeed" type="number" required
+                           min="@WebAccess.Media.Playlist.MinMarqueeSpeed" max="@WebAccess.Media.Playlist.MaxMarqueeSpeed"
+                           data-default="@WebAccess.Media.Playlist.DefaultMarqueeSpeed">
+                </div>
+            </div>
+            <details class="marquee-appearance">
+                <summary>全文與背景樣式</summary>
+                <h3>全文預設</h3>
+                <p class="muted">沒有個別設定的文字會沿用這組樣式。初始設定為白色、@WebAccess.Media.Playlist.DefaultMarqueeFontSize 像素。</p>
+                <div class="marquee-fields">
+                    <div class="marquee-field">
+                        <label asp-for="MarqueeTextColor">文字顏色</label>
+                        <input asp-for="MarqueeTextColor" type="color">
+                    </div>
+                    <div class="marquee-field">
+                        <label asp-for="MarqueeFontSize">文字大小（像素）</label>
+                        <input asp-for="MarqueeFontSize" type="number" required
+                               min="@WebAccess.Media.Playlist.MinMarqueeFontSize" max="@WebAccess.Media.Playlist.MaxMarqueeFontSize"
+                               data-default="@WebAccess.Media.Playlist.DefaultMarqueeFontSize">
+                    </div>
+                    <div class="marquee-field">
+                        <label asp-for="MarqueeFontWeight">字重</label>
+                        <select asp-for="MarqueeFontWeight">
+                            <option value="400">一般</option>
+                            <option value="600">半粗體</option>
+                            <option value="700">粗體</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="marquee-background">
+                    <h3>跑馬燈背景</h3>
+                    <div class="marquee-fields">
+                        <div class="marquee-field">
+                            <label asp-for="MarqueeBackgroundColor">背景顏色</label>
+                            <input asp-for="MarqueeBackgroundColor" type="color">
+                        </div>
+                        <div class="marquee-field">
+                            <label asp-for="MarqueeBackgroundOpacity">背景不透明度（%）</label>
+                            <input asp-for="MarqueeBackgroundOpacity" type="number" required min="0" max="100"
+                                   data-default="@WebAccess.Media.Playlist.DefaultMarqueeBackgroundOpacity"
+                                   aria-describedby="marquee-opacity-help">
+                            <small id="marquee-opacity-help">0% 為透明。</small>
+                        </div>
+                    </div>
+                </div>
+            </details>
+        </section></div>
+    </form>
+</main>
+<dialog id="media-library" aria-labelledby="media-library-title">
+    <form method="dialog" class="toolbar"><h2 id="media-library-title">現有媒體</h2><button id="close-media-library">關閉</button></form>
+    <p class="muted">若要刪除使用中的本機檔案，請先從播放清單移除並儲存。</p>
+    <p id="media-library-status" class="feedback" role="status" hidden></p>
+    <ul class="media-list" id="media-library-items"></ul>
+</dialog>
+<template id="media-entry-template">
+    <li class="media-entry">
+        <img class="thumb" alt="" width="56" height="36" loading="lazy" hidden>
+        <span class="thumb media-type" hidden>MP4</span>
+        <strong class="media-name"></strong>
+        <div class="media-actions">
+            <button type="button" data-add>加入清單</button>
+            <button type="button" data-delete>刪除檔案</button>
+        </div>
+    </li>
+</template>
+<dialog id="preview-dialog" aria-label="待機畫面預覽">
+    <form method="dialog" class="toolbar"><h2>待機畫面預覽</h2><button>關閉</button></form>
+    <div class="preview"><div id="preview-media"></div><div class="marquee" id="preview-marquee" hidden><span></span></div></div>
+</dialog>
+<script src="/marquee.js"></script>
+<script src="/marquee-character-editor.js"></script>
+<script>
+const playlistForm = document.getElementById('playlist-form');
+const list = document.getElementById('playlist');
+let dirty = false;
+const upload = document.getElementById('upload-media');
+const chooseMedia = document.getElementById('choose-media');
+const savePlaylist = document.getElementById('save-playlist');
+const uploadForm = document.getElementById('upload-form');
+const uploadStatus = document.getElementById('upload-status');
+const playlistRevision = document.getElementById('Revision');
+const mediaLibrary = document.getElementById('media-library');
+const openMediaLibrary = document.getElementById('open-media-library');
+const mediaLibraryStatus = document.getElementById('media-library-status');
+const mediaLibraryItems = document.getElementById('media-library-items');
+let mediaBusy = false;
+function updatePlaylistCount() {
+    const count = list.querySelectorAll('.row:not([hidden])').length;
+    document.getElementById('playlist-count').textContent = count;
+    document.getElementById('playlist-empty').hidden = count > 0;
+}
+chooseMedia.addEventListener('click', () => upload.click());
+upload.addEventListener('change', async () => {
+    if (!upload.files.length || mediaBusy) return;
+    try {
+        await postMedia(uploadForm.action, new FormData(uploadForm), uploadStatus, '正在上傳媒體…', appendMediaRow, true);
+    } finally {
+        upload.value = '';
+    }
+});
+function setMediaStatus(status, message) {
+    status.textContent = message;
+    status.hidden = !message;
+}
+function setMediaBusy(busy) {
+    mediaBusy = busy;
+    chooseMedia.disabled = busy;
+    savePlaylist.disabled = busy;
+    openMediaLibrary.disabled = busy;
+    mediaLibraryItems.inert = busy;
+}
+async function postMedia(url, body, status, pending, complete, expectsRow = false) {
+    body.set('revision', playlistRevision.value);
+    setMediaBusy(true);
+    setMediaStatus(status, pending);
+    try {
+        const headers = expectsRow ? { 'X-Playlist-Upload': 'row' } : {};
+        const response = await fetch(url, { method: 'POST', headers, body });
+        if (!response.ok) {
+            const error = await response.json();
+            setMediaStatus(status, error.message);
+            return false;
+        }
+        await complete(response);
+        return true;
+    } catch {
+        setMediaStatus(status, '無法完成媒體操作。請確認連線或檔案大小後重試。');
+        return false;
+    } finally {
+        setMediaBusy(false);
+    }
+}
+async function appendMediaRow(response) {
+    const revision = response.headers.get('X-Playlist-Revision');
+    const documentFragment = new DOMParser().parseFromString(await response.text(), 'text/html');
+    const row = documentFragment.querySelector('.row');
+    if (!row || !revision) throw new Error();
+    list.append(row);
+    playlistRevision.value = revision;
+    updatePlaylistCount();
+    setMediaStatus(uploadStatus, '已加入播放清單。');
+}
+function findPlaylistRow(file) {
+    return [...list.querySelectorAll('.row')].find(row => row.dataset.file === file);
+}
+function createMediaEntry(media) {
+    const entry = document.getElementById('media-entry-template').content.firstElementChild.cloneNode(true);
+    entry.dataset.file = media.file;
+    entry.dataset.name = media.name;
+    entry.querySelector('.media-name').textContent = media.name;
+    const picture = entry.querySelector('img');
+    const isVideo = media.file.endsWith('.mp4');
+    entry.querySelector('.media-type').hidden = !isVideo;
+    if (!isVideo) {
+        picture.hidden = false;
+        picture.src = '/media/' + encodeURIComponent(media.file);
+    }
+    const add = entry.querySelector('[data-add]');
+    add.disabled = media.isInPlaylist && !findPlaylistRow(media.file)?.hidden;
+    add.textContent = add.disabled ? '已在播放清單' : '加入清單';
+    add.setAttribute('aria-label', add.disabled ? media.name + ' 已在播放清單' : '將 ' + media.name + ' 加入播放清單');
+    const remove = entry.querySelector('[data-delete]');
+    remove.disabled = media.isInPlaylist;
+    remove.setAttribute('aria-label', '刪除檔案 ' + media.name);
+    return entry;
+}
+openMediaLibrary.addEventListener('click', async () => {
+    if (mediaBusy) return;
+    mediaLibraryItems.replaceChildren();
+    setMediaStatus(mediaLibraryStatus, '正在載入現有媒體…');
+    mediaLibrary.showModal();
+    setMediaBusy(true);
+    try {
+        const response = await fetch('/settings?handler=MediaLibrary', { cache: 'no-store' });
+        if (!response.ok) throw new Error();
+        const media = await response.json();
+        mediaLibraryItems.replaceChildren(...media.map(createMediaEntry));
+        setMediaStatus(mediaLibraryStatus, media.length ? '' : '目前沒有已上傳的媒體。');
+    } catch {
+        setMediaStatus(mediaLibraryStatus, '無法載入現有媒體。請關閉視窗後重試。');
+    } finally {
+        setMediaBusy(false);
+    }
+});
+mediaLibraryItems.addEventListener('click', async event => {
+    const button = event.target.closest('button');
+    if (!button || mediaBusy) return;
+    const entry = button.closest('[data-file]');
+    const file = entry.dataset.file;
+    const body = new FormData(uploadForm);
+    body.delete('media');
+    body.set('file', file);
+    if (button.hasAttribute('data-add')) {
+        const row = findPlaylistRow(file);
+        if (row?.hidden) {
+            row.querySelector('[name=remove]').remove();
+            setRowRemoved(row, false);
+            mediaLibrary.close();
+            setMediaStatus(uploadStatus, '已還原到播放清單。');
+            return;
+        }
+        if (await postMedia('/settings?handler=AddExisting', body, mediaLibraryStatus, '正在加入播放清單…', appendMediaRow, true)) {
+            mediaLibrary.close();
+        }
+    } else if (window.confirm('確定要刪除本機檔案「' + entry.dataset.name + '」？')) {
+        await postMedia('/settings?handler=DeleteMedia', body, mediaLibraryStatus, '正在刪除檔案…', async response => {
+            const result = await response.json();
+            playlistRevision.value = result.revision;
+            entry.remove();
+            document.getElementById('close-media-library').focus();
+            setMediaStatus(mediaLibraryStatus, result.message || (mediaLibraryItems.children.length ? '已刪除本機檔案。' : '已刪除本機檔案。現有媒體清單已空。'));
+        });
+    }
+});
+function markDirty() {
+    dirty = true;
+    document.getElementById('draft-status').textContent = '有未儲存變更';
+}
+function setRowRemoved(row, removed) {
+    row.hidden = removed;
+    for (const input of row.querySelectorAll('input:not([name=remove])')) {
+        input.disabled = removed;
+    }
+    updatePlaylistCount();
+    markDirty();
+}
+playlistForm.addEventListener('input', markDirty);
+playlistForm.addEventListener('invalid', event => {
+    const appearance = event.target.closest('.marquee-appearance');
+    if (appearance) appearance.open = true;
+}, true);
+playlistForm.addEventListener('submit', event => {
+    if (mediaBusy) {
+        event.preventDefault();
+        return;
+    }
+    dirty = false;
+});
+window.addEventListener('beforeunload', event => {
+    if (!dirty) return;
+    event.preventDefault();
+    event.returnValue = '';
+});
+list.addEventListener('click', function (event) {
+    const row = event.target.closest('.row');
+    if (!row) return;
+    if (event.target.hasAttribute('data-remove')) {
+        const removed = document.createElement('input');
+        removed.type = 'hidden';
+        removed.name = 'remove';
+        removed.value = row.dataset.file;
+        row.append(removed);
+        setRowRemoved(row, true);
+        return;
+    }
+    const direction = event.target.dataset.move;
+    if (!direction) return;
+    const rows = [...list.querySelectorAll('.row:not([hidden])')];
+    const index = rows.indexOf(row);
+    if (direction === 'up' && index > 0) list.insertBefore(row, rows[index - 1]);
+    if (direction === 'down' && index < rows.length - 1) rows[index + 1].after(row);
+    markDirty();
+});
+const dialog = document.getElementById('preview-dialog');
+const stage = document.getElementById('preview-media');
+const previewMarquee = document.getElementById('preview-marquee');
+const renderPreviewMarquee = createMarqueeRenderer(previewMarquee, stage.parentElement);
+function marqueeValue(id) {
+    const field = document.getElementById(id);
+    return field.validity.valid ? field.valueAsNumber : Number(field.dataset.default);
+}
+function readMarqueeSettings() {
+    return {
+        marquee: normalizeMarqueeText(document.getElementById('Marquee').value),
+        marqueeEnabled: document.getElementById('MarqueeEnabled').checked,
+        marqueeAtTop: document.getElementById('MarqueeAtTop').value === 'True',
+        marqueeFontSize: marqueeValue('MarqueeFontSize'),
+        marqueeSpeed: marqueeValue('MarqueeSpeed'),
+        marqueeTextColor: document.getElementById('MarqueeTextColor').value,
+        marqueeBackgroundColor: document.getElementById('MarqueeBackgroundColor').value,
+        marqueeBackgroundOpacity: marqueeValue('MarqueeBackgroundOpacity'),
+        marqueeFontWeight: Number(document.getElementById('MarqueeFontWeight').value),
+        marqueeCharacterStyles: JSON.parse(document.getElementById('MarqueeCharacterStyles').value || '[]')
+    };
+}
+setupMarqueeCharacterEditor(document.getElementById('Marquee'), readMarqueeSettings, markDirty);
+let timeout;
+document.getElementById('open-preview').addEventListener('click', () => {
+    const rows = [...list.querySelectorAll('.row:not([hidden])')];
+    function play(index) {
+        const row = rows[index];
+        const video = row.dataset.file.endsWith('.mp4');
+        const media = document.createElement(video ? 'video' : 'img');
+        const next = () => {
+            if (dialog.open && stage.firstChild === media) play((index + 1) % rows.length);
+        };
+        if (video) {
+            media.muted = document.getElementById('IsMuted').checked;
+            media.controls = true;
+            media.autoplay = true;
+            media.loop = rows.length === 1;
+            media.onended = next;
+        } else {
+            media.alt = row.querySelector('input[name$=".Name"]').value;
+        }
+        stage.replaceChildren(media);
+        media.src = '/media/' + encodeURIComponent(row.dataset.file);
+        if (!video && rows.length > 1) {
+            const seconds = Number(row.querySelector('input[type=number]').value);
+            timeout = setTimeout(next, Math.max(3, seconds) * 1000);
+        }
+    }
+    dialog.showModal();
+    renderPreviewMarquee(readMarqueeSettings());
+    if (rows.length) play(0);
+    else if (previewMarquee.hidden) stage.textContent = '播放清單目前是空的';
+});
+dialog.addEventListener('close', () => {
+    clearTimeout(timeout);
+    stage.replaceChildren();
+});
+</script>

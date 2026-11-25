@@ -1,0 +1,925 @@
+@page "/engineering"
+@model WebAccess.Media.Pages.PointsModel
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@{
+    Layout = "_ManagementLayout";
+    ViewData["Title"] = "工程設定";
+    int initialX = Model.Selected?.X ?? WebAccess.Media.PointPlan.DefaultCoordinate;
+    int initialY = Model.Selected?.Y ?? WebAccess.Media.PointPlan.DefaultCoordinate;
+    bool usesCustomTone = Model.Selected?.AlarmTone == WebAccess.Media.PointPlan.CustomAlarmTone;
+    string? storedAlarmAudioUrl = Model.Selected?.AlarmAudioFile is string audio ? $"/alarm-audio/{audio}" : null;
+}
+
+@section Actions {
+    <button id="save-point" class="primary" type="submit" form="point-form">儲存設定</button>
+}
+
+@section Styles {
+<link rel="stylesheet" href="/alarm-icons.css">
+<style>
+    .workspace { display: grid; grid-template-columns: minmax(190px, 250px) minmax(0, 1fr); min-height: calc(100vh - 68px); }
+    aside { padding: 1.15rem; background: var(--panel); border-right: 1px solid var(--line); }
+    h1, h2, p { margin: 0 0 .8rem; }
+    .workspace-title h1 { font-size: clamp(1.25rem, 2.2vw, 1.75rem); overflow-wrap: anywhere; }
+    .workspace-heading { min-width: 0; }
+    .workspace-heading p { margin: .25rem 0 0; }
+    .sidebar-heading, .canvas-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+    .sidebar-heading h2, .canvas-heading h2 { margin: 0; font-size: .95rem; }
+    .sidebar-section { margin-bottom: 1rem; }
+    .sidebar-count { padding: .12rem .45rem; border-radius: 1rem; background: var(--accent-soft); color: var(--accent); font-variant-numeric: tabular-nums; }
+    .add-point { display: block; margin: .65rem 0 .8rem; text-align: center; text-decoration: none; font-weight: 650; }
+    .point-search { margin-bottom: .5rem; }
+    .library-section { padding: .75rem 0; border-block: 1px solid var(--line); }
+    .library-section summary, .inspector details summary { padding: .45rem 0; cursor: pointer; font-weight: 650; }
+    .library-section form { margin-top: .55rem; }
+    .system-link {
+        display: flex; align-items: center; justify-content: space-between; gap: .6rem; min-height: 2.75rem;
+        margin-top: .85rem; padding: .5rem .75rem; border-radius: .5rem;
+        color: var(--text); font-weight: 600; text-decoration: none;
+    }
+    .system-link:hover, .system-link:focus-visible { background: var(--accent-soft); color: var(--accent); }
+    .system-link::after {
+        content: ""; flex: none; width: .42rem; height: .42rem;
+        border: solid currentColor; border-width: 1.5px 1.5px 0 0; transform: rotate(45deg);
+    }
+    .storage-location { margin-top: 1rem; padding-top: .75rem; border-top: 1px solid var(--line); }
+    .storage-location h2 { margin: 0 0 .35rem; font-size: .95rem; }
+    .storage-location p { margin: .35rem 0 0; }
+    .storage-location code { color: var(--text); overflow-wrap: anywhere; user-select: all; }
+    .workspace input[type="file"] { display: block; min-width: 0; min-height: 2.75rem; padding: .25rem .4rem; color: var(--muted); }
+    .workspace input[type="file"]::file-selector-button {
+        margin-inline-end: .5rem; padding: .35rem .55rem; border: 1px solid var(--border); border-radius: .3rem;
+        background: var(--accent-soft); color: var(--accent); font: inherit; font-weight: 600; cursor: pointer;
+    }
+    .workspace input[type="file"]:enabled::file-selector-button:hover { border-color: var(--accent); }
+    .workspace input[type="file"]:disabled { opacity: .65; }
+    ul { list-style: none; margin: 0; padding: 0; }
+    li a { display: block; padding: .55rem .7rem; margin: .2rem 0; border-radius: .4rem; overflow-wrap: anywhere; }
+    li a:hover, li a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
+    .point-row { display: flex; align-items: center; gap: .25rem; }
+    .point-row a { flex: 1; min-width: 0; }
+    .point-row button { padding: .2rem .45rem; color: #a42c3e; font-size: .8rem; white-space: nowrap; }
+    .point-row button, .floor-delete { min-height: 32px; }
+    main { padding: 1.25rem; min-width: 0; }
+    .editor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 330px); gap: 1rem; }
+    .canvas { min-height: clamp(350px, 65vh, 620px); display: flex; flex-direction: column; min-width: 0; }
+    .canvas-heading { flex-wrap: wrap; padding: .75rem 1rem; border-bottom: 1px solid var(--line); }
+    .canvas-heading .muted { margin: 0; font-size: .8rem; }
+    .canvas-stage { flex: 1; min-width: 0; min-height: 0; display: grid; place-items: center; padding: 1rem; text-align: center; background: radial-gradient(circle, #d9e3f1 1px, transparent 1px) 0 0 / 18px 18px, #fafcff; border-radius: 0 0 .65rem .65rem; }
+    .canvas-empty { width: min(100%, 23rem); padding: 1.1rem; background: var(--panel); border: 1px solid var(--line); border-radius: .6rem; }
+    .canvas-empty h3 { margin: 0 0 .35rem; font-size: 1rem; }
+    #alarm-preview-group { min-width: 0; max-width: 100%; }
+    .plan { position: relative; display: inline-block; max-width: 100%; cursor: crosshair; }
+    #plan:not(.alarm-frame) { cursor: default; }
+    .plan img { max-width: 100%; max-height: 66vh; display: block; }
+    #alarm-preview { max-width: 100%; margin-bottom: .65rem; line-height: 1.2; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .marker { position: absolute; transform: translate(-50%, -50%); cursor: grab; touch-action: none; }
+    .floor-grid, .icon-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; margin-bottom: .75rem; }
+    .floor-card { display: grid; gap: .35rem; padding: .35rem; overflow: hidden; }
+    .floor-card[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+    .floor-entry { display: grid; align-content: start; gap: .25rem; min-width: 0; }
+    .floor-delete { justify-self: end; padding: .15rem .4rem; font-size: .8rem; color: #a42c3e; }
+    @@media (pointer: coarse) {
+        .point-row { gap: .5rem; }
+        .point-row button, .floor-delete { min-width: 44px; min-height: 44px; padding-inline: .65rem; }
+    }
+    .floor-card img { width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: contain; }
+    .floor-card img, #image, #simulation-image { background-color: #fff; }
+    .floor-card span { text-overflow: ellipsis; overflow: hidden; white-space: nowrap; font-size: .8rem; }
+    .icon-option { display: flex; align-items: center; gap: .4rem; margin: 0; padding: .35rem; border: 1px solid var(--border); border-radius: .4rem; font-size: .85rem; }
+    .icon-option:has(:checked) { border-color: var(--accent); background: var(--accent-soft); }
+    .switch-field { position: relative; display: flex; align-items: center; gap: .6rem; min-height: 2.75rem; cursor: pointer; }
+    .switch-field input { position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; clip-path: inset(50%); }
+    .switch-track {
+        position: relative; flex: none; width: 2.25rem; height: 1.375rem;
+        border: 1px solid var(--muted); border-radius: 1rem; background: var(--background);
+    }
+    .switch-track::after {
+        content: ""; position: absolute; top: .1875rem; left: .1875rem; width: .875rem; height: .875rem;
+        border-radius: 50%; background: var(--muted);
+    }
+    .switch-field input:checked + .switch-track { background: var(--accent); border-color: var(--accent); }
+    .switch-field input:checked + .switch-track::after { transform: translateX(.875rem); background: var(--panel); }
+    .switch-field input:focus + .switch-track { outline: 2px solid var(--accent); outline-offset: 3px; }
+    .display-mode { padding: .65rem; background: var(--accent-soft); border-radius: .4rem; }
+    .display-mode small { display: block; margin-top: .2rem; }
+    .icon-option input { width: auto; margin: 0; }
+    @@media (forced-colors: active) {
+        .switch-field input + .switch-track { forced-color-adjust: none; background: Canvas; border-color: ButtonText; }
+        .switch-field input + .switch-track::after { background: ButtonText; }
+        .switch-field input:checked + .switch-track { background: Highlight; border-color: Highlight; }
+        .switch-field input:checked + .switch-track::after { background: HighlightText; }
+        .switch-field input:focus + .switch-track { outline-color: Highlight; }
+    }
+    [hidden] { display: none !important; }
+    .inspector { padding: 1rem; min-width: 0; }
+    .inspector h2 { font-size: 1.1rem; }
+    .inspector details { border-top: 1px solid var(--line); }
+    .inspector details > div { padding: .35rem 0; }
+    .alarm-sound-settings { padding-top: .35rem; border-top: 1px solid var(--line); }
+    .alarm-sound-settings > .switch-field { margin-bottom: .45rem; }
+    .alarm-sound-settings .feedback:empty { display: none; }
+    .inspector summary:focus-visible, .library-section summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .inspector input:not([type="checkbox"], [type="radio"]), .inspector select, .inspector textarea { width: 100%; min-width: 0; }
+    .inspector input[readonly] { background: var(--background); }
+    label { display: grid; gap: .25rem; margin-bottom: .75rem; }
+    .coordinates { display: grid; grid-template-columns: 1fr 1fr; gap: .55rem; }
+    fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+    legend { padding: 0; margin-bottom: .35rem; }
+    .remove { padding-top: .8rem; border-top: 1px solid var(--line); }
+    .remove button { color: #a42c3e; }
+    #point-save-status:empty { display: none; }
+    #point-field-error { color: #a42c3e; }
+    @@media (max-width: 960px) { .editor { grid-template-columns: 1fr; } }
+    @@media (max-width: 560px) { .workspace { grid-template-columns: 1fr; } aside { border-right: 0; border-bottom: 1px solid var(--line); } .canvas { min-height: 240px; } }
+    @@media (min-width: 961px) and (min-height: 540px) {
+        body { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+        .workspace { flex: 1; min-height: 0; }
+        .workspace > aside, .inspector { min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; }
+        main { display: flex; flex-direction: column; min-height: 0; }
+        .editor { flex: 1; min-height: 0; }
+        .canvas { min-height: 0; overflow: hidden; }
+        .canvas-stage { overflow: auto; }
+        .plan > #image { max-height: 58vh; }
+    }
+
+    input { width: 100%; }
+    .tag-picker { width: min(34rem, calc(100vw - 2rem)); max-height: 90vh; padding: 1rem; border: 1px solid var(--border); color: var(--text); }
+    .tag-picker::backdrop { background: #17243c66; }
+    .tag-picker-header { display: flex; justify-content: space-between; align-items: start; gap: .75rem; }
+    .tag-picker-header h2 { font-size: 1.1rem; }
+    .tag-results { display: grid; gap: .3rem; max-height: min(24rem, 50vh); overflow: auto; overscroll-behavior: contain; padding: .2rem; }
+    .tag-result { display: grid; gap: .1rem; text-align: left; overflow-wrap: anywhere; }
+    .tag-result:hover, .tag-result:focus-visible { background: var(--accent-soft); }
+    .workspace-title, .simulation-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .5rem; margin-bottom: .8rem; }
+    .workspace-title h1, .simulation-toolbar h2 { margin: 0; }
+    .workspace-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+    .simulation-dialog { width: min(68rem, calc(100vw - 2rem)); max-height: 92vh; padding: 1rem; border: 1px solid var(--border); color: var(--text); }
+    .simulation-dialog::backdrop { background: #17243c80; }
+    .simulation-stage { display: grid; justify-items: center; align-content: center; min-height: 64vh; gap: .8rem; padding: 1rem; border-radius: .5rem; background: #101923; color: #fff; text-align: center; }
+    .simulation-stage h3 { margin: 0; max-width: 100%; line-height: 1.2; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .simulation-stage .plan { cursor: default; }
+    .simulation-stage .plan > img { max-height: 58vh; margin: auto; }
+    .simulation-stage.image-only .plan { width: 100%; }
+    .simulation-stage.image-only .plan > img { width: 100%; height: 64vh; max-height: none; object-fit: contain; }
+</style>
+}
+
+<div class="workspace">
+    <aside aria-label="測點頁面與共用平面圖" tabindex="0">
+        <section class="sidebar-section" aria-labelledby="point-list-title">
+            <div class="sidebar-heading">
+                <h2 id="point-list-title">測點頁面</h2>
+                <small class="sidebar-count">@Model.Plans.Length 個測點</small>
+            </div>
+            <a class="action primary add-point" href="/engineering?add=true">＋ 新增測點頁面</a>
+            @if (Model.Plans.Length > 0)
+            {
+                <label class="point-search">搜尋測點頁面
+                    <input id="point-search" type="search" placeholder="輸入測點名稱" autocomplete="off" aria-controls="point-list">
+                </label>
+                <p id="point-search-status" class="muted" role="status" hidden>沒有符合的測點頁面。</p>
+            }
+            else
+            {
+                <p class="muted">尚未建立測點頁面</p>
+            }
+            <ul id="point-list">
+                @foreach (WebAccess.Media.PointPlan plan in Model.Plans)
+                {
+                    <li class="point-row">
+                        <a asp-page="Points" asp-route-selected="@plan.Point" aria-current="@(Model.Selected?.Point == plan.Point ? "page" : null)">@plan.Point</a>
+                        <form method="post" asp-page-handler="Remove" asp-route-selected="@Model.Selected?.Point"
+                              asp-route-add="@(Model.Selected is null)" data-remove-point="@plan.Point">
+                            <input type="hidden" name="revision" value="@Model.Revision">
+                            <button type="submit" name="point" value="@plan.Point" aria-label="刪除測點 @plan.Point">刪除</button>
+                        </form>
+                    </li>
+                }
+            </ul>
+        </section>
+        <details class="library-section" id="floor-library">
+            <summary>共用平面圖 <small id="floor-count" class="sidebar-count">@Model.FloorImages.Length 張</small></summary>
+            <form id="floor-upload" method="post" asp-page-handler="UploadFloorImages" enctype="multipart/form-data">
+                <label>選取平面圖即上傳 <input id="floor-upload-input" name="images" type="file" multiple accept=".png,.jpg,.jpeg"></label>
+            </form>
+            <p id="floor-status" class="feedback" role="status"></p>
+            <div class="floor-grid" id="floor-grid">
+                @foreach (WebAccess.Media.FloorImage floor in Model.FloorImages)
+                {
+                    <div class="floor-entry">
+                        <button class="floor-card" type="button" data-floor="@floor.File" title="@floor.Name" aria-pressed="@(Model.Selected?.File == floor.File ? "true" : "false")">
+                            <img src="/engineering-media/@floor.File" alt="" width="120" height="90" loading="lazy"><span>@floor.Name</span>
+                        </button>
+                        <button class="floor-delete" type="button" data-delete="@floor.File" aria-label="刪除平面圖 @floor.Name">刪除</button>
+                    </div>
+                }
+            </div>
+        </details>
+        <a class="action system-link" href="/engineering/startup">開機自動啟動</a>
+        <section class="storage-location" aria-labelledby="storage-location-title">
+            <h2 id="storage-location-title">資料儲存位置</h2>
+            <p><code id="storage-location-path">@Model.StorageLocation</code></p>
+            <p class="muted">播放清單、跑馬燈、測點設定與上傳檔案都存放在這裡。</p>
+        </section>
+    </aside>
+    <main id="main-content" tabindex="-1">
+        <div class="workspace-title">
+            <div class="workspace-heading">
+                <h1>@(Model.Selected?.Point ?? "新增測點頁面")</h1>
+                <p id="point-draft-status" class="muted" role="status">@(Model.Selected is null ? "尚未儲存" : "已儲存")</p>
+            </div>
+            <div class="workspace-actions">
+                <button id="open-simulation" type="button" aria-haspopup="dialog" disabled="@(Model.Selected is null)">模擬警報預覽</button>
+                @if (Model.Selected is null)
+                {
+                    <button id="save-and-add-point" type="submit" form="point-form" name="addNext" value="true">儲存並新增下一筆</button>
+                }
+            </div>
+        </div>
+        @if (Model.Feedback is string feedback)
+        {
+            <p class="feedback" role="status">@feedback</p>
+        }
+        <p id="point-save-status" class="feedback" role="status"></p>
+        <p id="point-reload" hidden><a href="">重新載入最新設定（會捨棄草稿）</a></p>
+        <div class="editor">
+            <div class="canvas card">
+                <div class="canvas-heading">
+                    <h2>平面圖預覽</h2>
+                    <p class="muted" id="position-hint" hidden="@(Model.Selected is null || Model.Selected.ImageOnly)">點選平面圖或拖曳圖示即可定位</p>
+                </div>
+                <div class="canvas-stage">
+                    <div id="empty-plan" class="canvas-empty" hidden="@(Model.Selected is not null)">
+                        <h3>先為測點選擇平面圖</h3>
+                        <p class="muted">可從共用平面圖選取，也可上傳新檔案。</p>
+                        <button id="choose-plan" type="button" class="primary">選擇平面圖</button>
+                    </div>
+                    <div id="alarm-preview-group" hidden="@(Model.Selected is null)">
+                        <h2 id="alarm-preview" data-api-text="@Model.CurrentAlarmText"></h2>
+                        <div class="plan" id="plan">
+                            @if (Model.Selected is WebAccess.Media.PointPlan selected)
+                            {
+                                <img id="image" src="/engineering-media/@selected.File" alt="測點平面圖" fetchpriority="high">
+                            }
+                            else
+                            {
+                                <img id="image" alt="測點平面圖預覽">
+                            }
+                            <span class="marker alarm-icon" id="marker" data-icon="@(Model.Selected?.Icon ?? WebAccess.Media.PointPlan.DefaultIcon)" style="left:@(initialX)%;top:@(initialY)%">
+                                <img id="marker-image" alt="" hidden>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="inspector card" role="region" aria-labelledby="inspector-title" tabindex="0">
+                <h2 id="inspector-title">測點與告警位置</h2>
+                <form id="point-form" method="post" asp-page-handler="Save" enctype="multipart/form-data">
+                    <input id="point-revision" name="revision" type="hidden" value="@Model.Revision">
+                    <input name="isNew" type="hidden" value="@(Model.Selected is null ? "true" : "false")">
+                    <details open>
+                        <summary>測點與平面圖</summary>
+                        <div>
+                            <label>測點名稱（Name） <input id="point-name" name="point" value="@Model.Selected?.Point" required maxlength="256" readonly="@(Model.Selected is not null)"></label>
+                            @if (Model.Selected is null)
+                            {
+                                <p><button type="button" id="load-tags" aria-haspopup="dialog">從 WebAccess 選取測點</button></p>
+                            }
+                            <label>共用平面圖
+                                <select name="sharedFile" id="shared-file" data-current-floor="@Model.Selected?.File">
+                                    <option value="">@(Model.Selected is null ? "請選擇平面圖" : "沿用目前的平面圖")</option>
+                                    @foreach (WebAccess.Media.FloorImage floor in Model.FloorImages)
+                                    {
+                                        <option value="@floor.File">@floor.Name</option>
+                                    }
+                                </select>
+                            </label>
+                            <label>或上傳新平面圖 <input name="image" id="file" type="file" accept=".png,.jpg,.jpeg"></label>
+                            <label class="switch-field display-mode">
+                                <input type="checkbox" role="switch" name="imageOnly" id="image-only" value="true"
+                                       checked="@(Model.Selected?.ImageOnly ?? false)" aria-labelledby="image-only-label" aria-describedby="image-only-help">
+                                <span class="switch-track" aria-hidden="true"></span>
+                                <span>
+                                    <strong id="image-only-label">全頁只顯示平面圖</strong>
+                                    <small id="image-only-help">勾選後隱藏警報文字與圖示，無需設定位置。</small>
+                                </span>
+                            </label>
+                        </div>
+                    </details>
+                    <fieldset id="alarm-options" hidden="@(Model.Selected?.ImageOnly ?? false)" disabled="@(Model.Selected?.ImageOnly ?? false)">
+                        <input type="hidden" name="suggestedAlarmText" id="suggested-alarm-text">
+                        <details>
+                            <summary>警報文字</summary>
+                            <div>
+                                <label>自訂文字
+                                    <textarea name="alarmText" id="alarm-text" rows="2" maxlength="500" placeholder="留空時使用 WebAccess 回傳的警報文字">@Model.Selected?.AlarmText</textarea>
+                                    <small>預設帶入測點描述。修改後才會覆寫 API 警報文字。</small>
+                                </label>
+                                <label>文字大小（px）
+                                    <input name="alarmTextSize" id="alarm-text-size" type="number" required
+                                           min="@WebAccess.Media.PointPlan.MinAlarmTextSize" max="@WebAccess.Media.PointPlan.MaxAlarmTextSize"
+                                           value="@(Model.Selected?.AlarmTextSize ?? WebAccess.Media.PointPlan.DefaultAlarmTextSize)">
+                                </label>
+                            </div>
+                        </details>
+                        <details>
+                            <summary>圖示與位置</summary>
+                            <div>
+                                <div class="coordinates">
+                                    <label>水平位置 % <input id="x" name="x" type="number" min="0" max="100" value="@initialX" required></label>
+                                    <label>垂直位置 % <input id="y" name="y" type="number" min="0" max="100" value="@initialY" required></label>
+                                </div>
+                                <label>圖示大小（px）
+                                    <input name="iconSize" id="icon-size" type="number" required
+                                           min="@WebAccess.Media.PointPlan.MinIconSize" max="@WebAccess.Media.PointPlan.MaxIconSize"
+                                           value="@(Model.Selected?.IconSize ?? WebAccess.Media.PointPlan.DefaultIconSize)">
+                                </label>
+                                <fieldset>
+                                    <legend>圖示樣式</legend>
+                                    <div class="icon-grid">
+                                        @foreach ((string value, string label) in WebAccess.Media.Pages.PointsModel.AlarmIcons)
+                                        {
+                                            <label class="icon-option">
+                                                <input type="radio" name="icon" value="@value" checked="@((Model.Selected?.Icon ?? WebAccess.Media.PointPlan.DefaultIcon) == value)">
+                                                @if (value != "custom")
+                                                {
+                                                    <span class="alarm-icon" data-icon="@value" aria-hidden="true"></span>
+                                                }
+                                                @label
+                                            </label>
+                                        }
+                                    </div>
+                                </fieldset>
+                                <label id="custom-icon-field" hidden="@(Model.Selected?.Icon != "custom")">上傳 PNG / JPEG 圖示
+                                    <input name="customIcon" id="custom-icon" type="file" accept=".png,.jpg,.jpeg" data-existing="@Model.Selected?.IconFile">
+                                </label>
+                                <label class="switch-field">
+                                    <input type="checkbox" role="switch" name="flash" id="flash" value="true" checked="@(Model.Selected?.Flash ?? true)">
+                                    <span class="switch-track" aria-hidden="true"></span>
+                                    閃爍警報圖示
+                                </label>
+                            </div>
+                        </details>
+                    </fieldset>
+                    <div class="alarm-sound-settings">
+                        <label class="switch-field">
+                            <input type="checkbox" role="switch" name="alarmSoundEnabled" id="alarm-sound-enabled" value="true"
+                                   checked="@(Model.Selected?.AlarmSoundEnabled ?? false)">
+                            <span class="switch-track" aria-hidden="true"></span>
+                            播放警報提示音
+                        </label>
+                        <input type="hidden" name="alarmSoundEnabled" value="false">
+                        <fieldset id="alarm-sound-fields" hidden="@(Model.Selected?.AlarmSoundEnabled != true)" disabled="@(Model.Selected?.AlarmSoundEnabled != true)">
+                            <label>音效
+                                <select name="alarmTone" id="alarm-tone">
+                                    @foreach ((string value, string label) in WebAccess.Media.Pages.PointsModel.AlarmTones)
+                                    {
+                                        <option value="@value" selected="@((Model.Selected?.AlarmTone ?? WebAccess.Media.PointPlan.DefaultAlarmTone) == value)">@label</option>
+                                    }
+                                </select>
+                            </label>
+                            <label id="alarm-audio-field" hidden="@(!usesCustomTone)">
+                                自訂音檔
+                                <input name="alarmAudio" id="alarm-audio" type="file" accept=".mp3,.wav"
+                                       disabled="@(!usesCustomTone)" required="@(usesCustomTone && storedAlarmAudioUrl is null)"
+                                       data-existing-url="@storedAlarmAudioUrl"
+                                       data-max-megabytes="@WebAccess.Media.PlayerSettings.MaxAlarmAudioMegabytes">
+                                <small>支援 MP3 和 WAV，單檔上限 @WebAccess.Media.PlayerSettings.MaxAlarmAudioMegabytes MB。</small>
+                                @if (storedAlarmAudioUrl is not null)
+                                {
+                                    <small>目前音檔為 @Model.Selected?.AlarmAudioName</small>
+                                }
+                            </label>
+                            <label>音量（%）
+                                <input name="alarmVolume" id="alarm-volume" type="number" required
+                                       min="@WebAccess.Media.PointPlan.MinAlarmVolume" max="@WebAccess.Media.PointPlan.MaxAlarmVolume"
+                                       value="@(Model.Selected?.AlarmVolume ?? WebAccess.Media.PointPlan.DefaultAlarmVolume)">
+                            </label>
+                            <button type="button" id="preview-alarm-sound">試聽音效</button>
+                            <p class="feedback" id="alarm-sound-status" role="status"></p>
+                        </fieldset>
+                    </div>
+                </form>
+                @if (Model.Selected is WebAccess.Media.PointPlan current)
+                {
+                    <form class="remove" method="post" asp-page-handler="Remove" data-remove-point="@current.Point">
+                        <input type="hidden" name="revision" value="@Model.Revision">
+                        <button name="point" value="@current.Point">移除測點頁面</button>
+                    </form>
+                }
+            </div>
+        </div>
+    </main>
+</div>
+<dialog class="simulation-dialog card" id="alarm-simulation" aria-labelledby="simulation-heading">
+    <form method="dialog" class="simulation-toolbar">
+        <h2 id="simulation-heading">模擬警報預覽</h2>
+        <button>關閉</button>
+    </form>
+    <div class="simulation-stage" id="simulation-stage">
+        <h3 id="simulation-text"></h3>
+        <div class="plan" id="simulation-plan"><img id="simulation-image" alt="測點平面圖"></div>
+    </div>
+</dialog>
+<template id="floor-entry">
+    <div class="floor-entry">
+        <button class="floor-card" type="button"><img alt="" width="120" height="90" loading="lazy"><span></span></button>
+        <button class="floor-delete" type="button">刪除</button>
+    </div>
+</template>
+@if (Model.Selected is null)
+{
+    <dialog class="tag-picker card" id="tag-picker" aria-labelledby="tag-picker-title">
+        <div class="tag-picker-header">
+            <h2 id="tag-picker-title">選取 WebAccess 測點</h2>
+            <form method="dialog"><button>關閉</button></form>
+        </div>
+        <label>搜尋測點
+            <input id="tag-search" type="search" placeholder="輸入 Name 或描述" autocomplete="off" autofocus>
+        </label>
+        <p class="muted" id="tag-status" role="status"></p>
+        <button type="button" id="retry-tags" hidden>重新讀取</button>
+        <div class="tag-results" id="tag-results" role="group" aria-label="搜尋結果"></div>
+    </dialog>
+}
+<script>
+document.querySelector('.workspace').addEventListener('submit', event => {
+    const pointName = event.target.dataset.removePoint;
+    if (pointName && !window.confirm('確定要刪除測點「' + pointName + '」？')) event.preventDefault();
+});
+const pointForm = document.getElementById('point-form');
+const draftStatus = document.getElementById('point-draft-status');
+let pointDirty = false;
+function markPointDirty() {
+    if (pointDirty) return;
+    pointDirty = true;
+    draftStatus.textContent = '有未儲存變更';
+}
+pointForm.addEventListener('input', markPointDirty);
+pointForm.addEventListener('change', markPointDirty);
+const soundEnabled = document.getElementById('alarm-sound-enabled');
+const soundFields = document.getElementById('alarm-sound-fields');
+const soundTone = document.getElementById('alarm-tone');
+const soundFile = document.getElementById('alarm-audio');
+const soundFileField = document.getElementById('alarm-audio-field');
+const soundVolume = document.getElementById('alarm-volume');
+const soundStatus = document.getElementById('alarm-sound-status');
+const soundPreview = new Audio();
+let temporarySound = null;
+function stopSoundPreview() {
+    soundPreview.pause();
+    if (temporarySound) URL.revokeObjectURL(temporarySound);
+    temporarySound = null;
+    soundStatus.textContent = '';
+}
+function updateSoundFields() {
+    soundFields.hidden = !soundEnabled.checked;
+    soundFields.disabled = !soundEnabled.checked;
+    const usesCustomTone = soundTone.value === 'custom';
+    soundFileField.hidden = !usesCustomTone;
+    soundFile.disabled = !usesCustomTone;
+    soundFile.required = usesCustomTone && !soundFile.dataset.existingUrl;
+    stopSoundPreview();
+}
+soundEnabled.addEventListener('change', updateSoundFields);
+soundTone.addEventListener('change', updateSoundFields);
+soundFile.addEventListener('change', () => {
+    const selected = soundFile.files[0];
+    const maxMegabytes = Number(soundFile.dataset.maxMegabytes);
+    soundFile.setCustomValidity(selected?.size > maxMegabytes * 1024 * 1024 ? '音檔超過 ' + maxMegabytes + ' MB，請選擇較小的檔案。' : '');
+    stopSoundPreview();
+});
+soundPreview.addEventListener('ended', stopSoundPreview);
+document.getElementById('preview-alarm-sound').addEventListener('click', async () => {
+    if (!soundVolume.reportValidity()) return;
+    stopSoundPreview();
+    if (soundTone.value === 'custom') {
+        if (!soundFile.reportValidity()) return;
+        const selected = soundFile.files[0];
+        temporarySound = selected ? URL.createObjectURL(selected) : null;
+        soundPreview.src = temporarySound || soundFile.dataset.existingUrl;
+    } else {
+        soundPreview.src = '/alarm-sounds/' + encodeURIComponent(soundTone.value) + '.wav';
+    }
+    soundPreview.volume = soundVolume.valueAsNumber / 100;
+    try {
+        await soundPreview.play();
+    } catch (error) {
+        if (error.name !== 'AbortError') soundStatus.textContent = '無法播放音效，請確認音檔與瀏覽器播放權限。';
+    }
+});
+function revealField(field) {
+    const section = field.closest('details');
+    if (section) section.open = true;
+}
+pointForm.addEventListener('invalid', event => revealField(event.target), true);
+const pointSearch = document.getElementById('point-search');
+pointSearch?.addEventListener('input', () => {
+    const query = pointSearch.value.trim().toLocaleLowerCase();
+    const rows = document.querySelectorAll('#point-list .point-row');
+    let hasMatch = false;
+    for (const row of rows) {
+        row.hidden = !row.querySelector('a').textContent.toLocaleLowerCase().includes(query);
+        hasMatch ||= !row.hidden;
+    }
+    document.getElementById('point-search-status').hidden = hasMatch;
+});
+window.addEventListener('beforeunload', event => {
+    if (!pointDirty) return;
+    event.preventDefault();
+    event.returnValue = '';
+});
+const image = document.getElementById('image');
+const previewGroup = document.getElementById('alarm-preview-group');
+const positionHint = document.getElementById('position-hint');
+const previewText = document.getElementById('alarm-preview');
+const alarmText = document.getElementById('alarm-text');
+const suggestedText = document.getElementById('suggested-alarm-text');
+const point = document.getElementById('point-name');
+const alarmTextSize = document.getElementById('alarm-text-size');
+const iconSize = document.getElementById('icon-size');
+const marker = document.getElementById('marker');
+const planFrame = document.getElementById('plan');
+const openSimulation = document.getElementById('open-simulation');
+const simulation = document.getElementById('alarm-simulation');
+const simulationPlan = document.getElementById('simulation-plan');
+const simulationImage = document.getElementById('simulation-image');
+const markerImage = document.getElementById('marker-image');
+const customIcon = document.getElementById('custom-icon');
+const imageOnly = document.getElementById('image-only');
+const alarmOptions = document.getElementById('alarm-options');
+const x = document.getElementById('x');
+const y = document.getElementById('y');
+let temporaryImage = null;
+let temporaryIcon = null;
+function previewSize(field) {
+    return Math.max(Number(field.min), Math.min(Number(field.max), Number(field.value || field.defaultValue))) + 'px';
+}
+function updateText() {
+    previewText.textContent = alarmText.value.trim() || previewText.dataset.apiText || 'WebAccess 警報文字';
+    previewText.style.fontSize = previewSize(alarmTextSize);
+    previewText.hidden = imageOnly.checked;
+}
+function suggestText(description) {
+    if (alarmText.value !== suggestedText.value) return;
+    suggestedText.value = (description || '').trim().slice(0, alarmText.maxLength);
+    alarmText.value = suggestedText.value;
+    updateText();
+}
+async function loadSuggestedText() {
+    const name = point.value.trim();
+    if (!name || alarmText.value !== suggestedText.value) return;
+    try {
+        const response = await fetch('/engineering?handler=Tags&point=' + encodeURIComponent(name), { cache: 'no-store' });
+        if (!response.ok || point.value.trim() !== name) return;
+        const tag = await response.json();
+        if (point.value.trim() === name) suggestText(tag.description);
+    } catch {
+        // 讀取測點失敗時保留可手動輸入的文字。
+    }
+}
+if (previewText.dataset.apiText) suggestText(previewText.dataset.apiText);
+else if (point.readOnly) loadSuggestedText();
+point.addEventListener('change', () => {
+    suggestText('');
+    loadSuggestedText();
+});
+function updatePositionHint() {
+    positionHint.hidden = previewGroup.hidden || imageOnly.checked;
+}
+function updateIcon() {
+    const icon = document.querySelector('input[name=icon]:checked').value;
+    const isCustom = icon === 'custom';
+    alarmOptions.hidden = imageOnly.checked;
+    alarmOptions.disabled = imageOnly.checked;
+    marker.dataset.icon = icon;
+    marker.dataset.flash = document.getElementById('flash').checked;
+    marker.style.setProperty('--icon-size', previewSize(iconSize));
+    marker.hidden = imageOnly.checked;
+    planFrame.classList.toggle('alarm-frame', !marker.hidden);
+    updatePositionHint();
+    updateText();
+    document.getElementById('custom-icon-field').hidden = !isCustom;
+    customIcon.disabled = !isCustom;
+    customIcon.required = isCustom && !customIcon.dataset.existing;
+    const source = temporaryIcon || (customIcon.dataset.existing ? '/engineering-media/' + customIcon.dataset.existing : '');
+    markerImage.hidden = !isCustom || !source;
+    if (source && markerImage.getAttribute('src') !== source) markerImage.src = source;
+}
+alarmText.addEventListener('input', updateText);
+alarmTextSize.addEventListener('input', updateText);
+iconSize.addEventListener('input', updateIcon);
+for (const field of document.querySelectorAll('input[name=icon], #flash, #image-only')) {
+    field.addEventListener('change', updateIcon);
+}
+customIcon.addEventListener('change', () => {
+    if (temporaryIcon) URL.revokeObjectURL(temporaryIcon);
+    temporaryIcon = customIcon.files[0] ? URL.createObjectURL(customIcon.files[0]) : null;
+    updateIcon();
+});
+updateIcon();
+openSimulation.addEventListener('click', () => {
+    const source = image.getAttribute('src');
+    if (!source) return;
+    const text = document.getElementById('simulation-text');
+    text.textContent = previewText.textContent;
+    text.style.fontSize = previewText.style.fontSize;
+    text.hidden = imageOnly.checked;
+    document.getElementById('simulation-stage').classList.toggle('image-only', imageOnly.checked);
+    simulationPlan.classList.toggle('alarm-frame', !marker.hidden);
+    simulationImage.src = source;
+    if (!marker.hidden) {
+        const icon = marker.cloneNode(true);
+        icon.removeAttribute('id');
+        icon.querySelector('img').removeAttribute('id');
+        simulationPlan.append(icon);
+    }
+    simulation.showModal();
+});
+simulation.addEventListener('close', () => {
+    simulationImage.removeAttribute('src');
+    simulationPlan.querySelector('.marker')?.remove();
+});
+function updateMarker() {
+    marker.style.left = x.value + '%';
+    marker.style.top = y.value + '%';
+}
+x.addEventListener('input', updateMarker);
+y.addEventListener('input', updateMarker);
+function locate(event) {
+    if (imageOnly.checked) return;
+    const bounds = image.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return;
+    x.value = Math.max(0, Math.min(100, Math.round(100 * (event.clientX - bounds.left) / bounds.width)));
+    y.value = Math.max(0, Math.min(100, Math.round(100 * (event.clientY - bounds.top) / bounds.height)));
+    updateMarker();
+    markPointDirty();
+}
+image.addEventListener('click', locate);
+marker.addEventListener('pointerdown', event => {
+    if (event.button !== 0) return;
+    marker.setPointerCapture(event.pointerId);
+});
+marker.addEventListener('pointermove', event => {
+    if (marker.hasPointerCapture(event.pointerId)) locate(event);
+});
+const loadTags = document.getElementById('load-tags');
+if (loadTags) {
+    const dialog = document.getElementById('tag-picker');
+    const search = document.getElementById('tag-search');
+    const message = document.getElementById('tag-status');
+    const results = document.getElementById('tag-results');
+    const retry = document.getElementById('retry-tags');
+    const limit = 100;
+    let tags = null;
+    let loading = false;
+    let selected = false;
+    function renderTags() {
+        if (!tags) return;
+        const words = search.value.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+        const matches = tags.filter(tag => words.every(word => tag.searchText.includes(word)));
+        results.replaceChildren();
+        for (const tag of matches.slice(0, limit)) {
+            const button = document.createElement('button');
+            const name = document.createElement('strong');
+            const description = document.createElement('small');
+            button.type = 'button';
+            button.className = 'tag-result';
+            name.textContent = tag.name;
+            description.textContent = tag.description;
+            button.append(name, description);
+            button.addEventListener('click', () => {
+                point.value = tag.name;
+                markPointDirty();
+                suggestText(tag.description);
+                selected = true;
+                dialog.close();
+            });
+            results.append(button);
+        }
+        message.textContent = !tags.length ? 'WebAccess 目前沒有測點。'
+            : !matches.length ? '沒有符合的測點。請更換關鍵字，或關閉後手動輸入。'
+            : matches.length > limit ? `找到 ${matches.length} 筆，顯示前 ${limit} 筆。可加入關鍵字縮小範圍。`
+            : `找到 ${matches.length} 筆測點。`;
+    }
+    async function fetchTags() {
+        if (loading) return;
+        loading = true;
+        retry.hidden = true;
+        results.replaceChildren();
+        message.textContent = '正在讀取測點…';
+        try {
+            const response = await fetch('/engineering?handler=Tags', { cache: 'no-store' });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error);
+            tags = data.map(tag => ({ ...tag, searchText: (tag.name + ' ' + tag.description).toLocaleLowerCase() }));
+            renderTags();
+        } catch (error) {
+            message.textContent = error.message || '無法讀取測點，請手動輸入。';
+            retry.hidden = false;
+        } finally {
+            loading = false;
+        }
+    }
+    loadTags.addEventListener('click', () => {
+        selected = false;
+        search.value = '';
+        dialog.showModal();
+        if (tags) renderTags();
+        else fetchTags();
+    });
+    dialog.addEventListener('close', () => {
+        if (selected) point.focus();
+    });
+    retry.addEventListener('click', () => {
+        search.focus();
+        fetchTags();
+    });
+    search.addEventListener('input', renderTags);
+    dialog.addEventListener('keydown', event => {
+        if (event.isComposing || event.keyCode === 229) return;
+        const first = results.firstElementChild;
+        if (event.target === search && first && (event.key === 'ArrowDown' || event.key === 'Enter')) {
+            event.preventDefault();
+            if (event.key === 'Enter') first.click();
+            else first.focus();
+        } else if (results.contains(event.target) && ['ArrowUp', 'ArrowDown'].includes(event.key)) {
+            event.preventDefault();
+            const next = event.key === 'ArrowDown' ? event.target.nextElementSibling : event.target.previousElementSibling || search;
+            next?.focus();
+        }
+    });
+}
+const fileInput = document.getElementById('file');
+const sharedFile = document.getElementById('shared-file');
+const originalImage = image.getAttribute('src');
+const grid = document.getElementById('floor-grid');
+const library = document.getElementById('floor-library');
+document.getElementById('choose-plan').addEventListener('click', () => {
+    const firstFloor = grid.querySelector('[data-floor]');
+    if (firstFloor) {
+        library.open = true;
+        firstFloor.focus();
+    } else {
+        revealField(fileInput);
+        fileInput.focus();
+        fileInput.click();
+    }
+});
+function updatePlan() {
+    const file = fileInput.files[0];
+    if (temporaryImage) URL.revokeObjectURL(temporaryImage);
+    temporaryImage = file ? URL.createObjectURL(file) : null;
+    const source = temporaryImage || (sharedFile.value ? '/engineering-media/' + encodeURIComponent(sharedFile.value) : originalImage);
+    if (source) image.src = source;
+    else image.removeAttribute('src');
+    previewGroup.hidden = !source;
+    openSimulation.disabled = !source;
+    document.getElementById('empty-plan').hidden = !!source;
+    updatePositionHint();
+    const activeFloor = file ? '' : sharedFile.value || sharedFile.dataset.currentFloor;
+    for (const card of grid.querySelectorAll('[data-floor]')) {
+        card.setAttribute('aria-pressed', String(card.dataset.floor === activeFloor));
+    }
+}
+fileInput.addEventListener('change', updatePlan);
+sharedFile.addEventListener('change', () => {
+    fileInput.value = '';
+    updatePlan();
+});
+const libraryForm = document.getElementById('floor-upload');
+const uploadInput = document.getElementById('floor-upload-input');
+const libraryStatus = document.getElementById('floor-status');
+const revision = document.getElementById('point-revision');
+const saveButtons = document.querySelectorAll('button[type="submit"][form="point-form"]');
+function setSaveButtonsDisabled(disabled) {
+    for (const button of saveButtons) button.disabled = disabled;
+}
+let libraryBusy = false;
+let pointSaving = false;
+const saveStatus = document.getElementById('point-save-status');
+const reloadPoint = document.getElementById('point-reload');
+let invalidPointField = null;
+let fieldDescription = null;
+function clearPointError() {
+    document.getElementById('point-field-error')?.remove();
+    if (!invalidPointField) return;
+    invalidPointField.removeAttribute('aria-invalid');
+    if (fieldDescription) invalidPointField.setAttribute('aria-describedby', fieldDescription);
+    else invalidPointField.removeAttribute('aria-describedby');
+    invalidPointField = null;
+}
+pointForm.addEventListener('input', clearPointError);
+pointForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (pointSaving || libraryBusy) return;
+    clearPointError();
+    reloadPoint.hidden = true;
+    const body = new FormData(pointForm, event.submitter);
+    pointSaving = true;
+    pointForm.inert = true;
+    setSaveButtonsDisabled(true);
+    saveStatus.textContent = '正在儲存測點…';
+    try {
+        const response = await fetch(pointForm.action, { method: 'POST', headers: { Accept: 'application/json' }, body });
+        const data = await response.json();
+        if (response.ok && data.redirect) {
+            pointDirty = false;
+            location.assign(data.redirect);
+            return;
+        }
+        saveStatus.textContent = data.message || '無法儲存，請重試。草稿仍保留。';
+        reloadPoint.hidden = response.status !== 409;
+        if (data.field) {
+            invalidPointField = Array.from(pointForm.elements).find(field => field.name === data.field && !field.hidden &&
+                !field.disabled && field.type !== 'hidden');
+            if (invalidPointField) {
+                revealField(invalidPointField);
+                const error = document.createElement('p');
+                error.id = 'point-field-error';
+                error.textContent = saveStatus.textContent;
+                fieldDescription = invalidPointField.getAttribute('aria-describedby');
+                invalidPointField.setAttribute('aria-invalid', 'true');
+                invalidPointField.setAttribute('aria-describedby', [fieldDescription, error.id].filter(Boolean).join(' '));
+                (invalidPointField.labels?.[0] || invalidPointField).after(error);
+            }
+        }
+    } catch {
+        saveStatus.textContent = '無法連線或上傳檔案過大。請確認後重試，草稿仍保留。';
+    } finally {
+        pointSaving = false;
+        pointForm.inert = false;
+        setSaveButtonsDisabled(false);
+        invalidPointField?.focus();
+    }
+});
+function renderLibrary(images) {
+    const selectedFile = sharedFile.value;
+    sharedFile.replaceChildren(sharedFile.options[0]);
+    grid.replaceChildren();
+    for (const floor of images) {
+        sharedFile.add(new Option(floor.name, floor.file));
+        const entry = document.getElementById('floor-entry').content.cloneNode(true);
+        const card = entry.querySelector('.floor-card');
+        const remove = entry.querySelector('.floor-delete');
+        card.dataset.floor = floor.file;
+        card.title = floor.name;
+        card.querySelector('img').src = '/engineering-media/' + encodeURIComponent(floor.file);
+        card.querySelector('span').textContent = floor.name;
+        remove.dataset.delete = floor.file;
+        remove.setAttribute('aria-label', '刪除平面圖 ' + floor.name);
+        grid.append(entry);
+    }
+    sharedFile.value = images.some(floor => floor.file === selectedFile) ? selectedFile : '';
+    document.getElementById('floor-count').textContent = images.length + ' 張';
+    updatePlan();
+}
+async function updateLibrary(endpoint, body, pending) {
+    if (libraryBusy || pointSaving) return;
+    libraryBusy = true;
+    uploadInput.disabled = true;
+    setSaveButtonsDisabled(true);
+    libraryStatus.textContent = pending;
+    try {
+        body.set('revision', revision.value);
+        const response = await fetch(endpoint, { method: 'POST', body });
+        const result = await response.json();
+        libraryStatus.textContent = result.message;
+        if (response.ok) {
+            revision.value = result.revision;
+            for (const field of document.querySelectorAll('form[data-remove-point] input[name="revision"]')) {
+                field.value = result.revision;
+            }
+            renderLibrary(result.images);
+        }
+    } catch {
+        libraryStatus.textContent = '共用平面圖操作未完成。請確認連線或檔案大小後再試。';
+    } finally {
+        libraryBusy = false;
+        uploadInput.disabled = false;
+        setSaveButtonsDisabled(false);
+        uploadInput.value = '';
+    }
+}
+uploadInput.addEventListener('change', () => {
+    if (uploadInput.files.length) updateLibrary(libraryForm.action, new FormData(libraryForm), '正在上傳平面圖…');
+});
+grid.addEventListener('click', event => {
+    const card = event.target.closest('[data-floor]');
+    if (card) {
+        sharedFile.value = card.dataset.floor;
+        fileInput.value = '';
+        updatePlan();
+        markPointDirty();
+        return;
+    }
+    const remove = event.target.closest('[data-delete]');
+    if (!remove || libraryBusy) return;
+    if (!window.confirm('確定要刪除這張共用平面圖？')) return;
+    const body = new FormData(libraryForm);
+    body.delete('images');
+    body.set('file', remove.dataset.delete);
+    updateLibrary('/engineering?handler=DeleteFloorImage', body, '正在刪除平面圖…');
+});
+</script>

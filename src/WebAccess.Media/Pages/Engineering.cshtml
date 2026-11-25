@@ -1,0 +1,60 @@
+@page "/engineering/connection"
+@model WebAccess.Media.Pages.EngineeringModel
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@{ Layout = "_ManagementLayout"; ViewData["Title"] = "WebAccess 連線"; }
+
+@section Actions {
+    <button type="submit" form="connection-form" class="primary" aria-label="儲存設定並開始監控">儲存設定</button>
+}
+
+@section Styles {
+<style>
+        form { display: grid; gap: .9rem; padding: 1.5rem; }
+        label { display: grid; gap: .3rem; }
+        .actions { display: flex; flex-wrap: wrap; gap: .65rem; margin-top: .45rem; }
+        .feedback { border-left: 4px solid; padding: .6rem .9rem; background: var(--panel); }
+        .success { color: #197451; }
+        .error { color: #ab323b; }
+        .field-validation-valid { display: none; }
+
+        main { max-width: 720px; margin: auto; padding: 1.25rem; }
+        input { width: 100%; }
+</style>
+}
+
+<main id="main-content" tabindex="-1">
+    <h1>WebAccess 連線</h1>
+    @if (Model.Feedback is string feedback)
+    {
+        <p class="feedback @(Model.IsSuccessful ? "success" : "error")" role="status">@feedback</p>
+    }
+    <form class="card" id="connection-form" method="post" asp-page-handler="Save">
+        <label>WebAccess IP 位址
+            <input asp-for="Input.Ip" required placeholder="例如 192.168.1.100…" autocomplete="off" spellcheck="false" aria-describedby="ip-error">
+            <span id="ip-error" class="error" asp-validation-for="Input.Ip"></span>
+            <small>程式會自動使用 HTTP 並加上 /WaWebService/Json。</small>
+        </label>
+        <label>專案名稱<input asp-for="Input.Project" required autocomplete="off" aria-describedby="project-error">
+            <span id="project-error" class="error" asp-validation-for="Input.Project"></span>
+        </label>
+        <label>帳號<input asp-for="Input.Username" required autocomplete="username" spellcheck="false" aria-describedby="username-error">
+            <span id="username-error" class="error" asp-validation-for="Input.Username"></span>
+        </label>
+        <label>密碼
+            <input name="Input.Password" type="password" autocomplete="current-password">
+            <small>使用相同連線資料時可留空，沿用已儲存的密碼。測試後儲存新設定時，請再次輸入密碼。</small>
+        </label>
+        <div class="actions">
+            <button type="submit" asp-page-handler="Test">測試連線</button>
+        </div>
+    </form>
+</main>
+<script>
+const firstError = document.querySelector('#connection-form .input-validation-error');
+if (firstError) {
+    for (const field of document.querySelectorAll('#connection-form .input-validation-error')) {
+        field.setAttribute('aria-invalid', 'true');
+    }
+    firstError.focus();
+}
+</script>

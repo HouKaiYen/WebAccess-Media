@@ -1,0 +1,144 @@
+using System.Text.Json;
+using Microsoft.AspNetCore.Http;
+using NUnit.Framework;
+using Reqnroll;
+using WebAccess.Media;
+
+[Binding]
+public sealed class AlarmAppearanceSteps : IDisposable
+{
+    private readonly DirectoryInfo _directory = Directory.CreateTempSubdirectory();
+    private PointPlan? _plan;
+    private string? _file;
+    private Alarm? _alarm;
+    private string? _suggested;
+    private string? _override;
+
+    [Given("載入沒有圖示欄位的測點設定")]
+    public void GivenLegacyPlan() =>
+        _plan = JsonSerializer.Deserialize<PointPlan>("""{"Point":"A","File":"a.png","X":25,"Y":75}""");
+
+    [Then("預設顯示閃爍 SOS 圓牌且純圖片模式關閉")]
+    public void ThenDefaults()
+    {
+        Assert.That(_plan?.Icon, Is.EqualTo("sos"));
+        Assert.That(_plan?.Flash, Is.True);
+        Assert.That(_plan?.ImageOnly, Is.False);
+        Assert.That(_plan?.AlarmTextSize, Is.EqualTo(PointPlan.DefaultAlarmTextSize));
+        Assert.That(_plan?.IconSize, Is.EqualTo(PointPlan.DefaultIconSize));
+    }
+
+    [Then("警報提示音預設關閉")]
+    public void ThenAlarmSoundIsOff()
+    {
+        Assert.That(_plan?.AlarmSoundEnabled, Is.False);
+        Assert.That(_plan?.AlarmTone, Is.EqualTo(PointPlan.DefaultAlarmTone));
+        Assert.That(_plan?.AlarmVolume, Is.EqualTo(PointPlan.DefaultAlarmVolume));
+    }
+
+    [When("管理員儲存純平面圖模式並啟用雙音提示及 45% 音量")]
+    public void WhenImageOnlySoundSaved()
+    {
+        PlayerSettings storage = new(_directory.FullName);
+        PointPlan configured = _plan! with
+        {
+            ImageOnly = true, AlarmSoundEnabled = true, AlarmTone = "double-beep", AlarmVolume = 45
+        };
+        Assert.That(storage.Save(storage.Read() with { PointPlans = [configured] }), Is.True);
+        _plan = storage.Read().PointPlans!.Single();
+    }
+
+    [Then("顯示頁沿用儲存的雙音提示與音量")]
+    public void ThenSavedSoundIsUsed()
+    {
+        PointPlan? marker = AlarmDisplay.SelectRegistered([_alarm!], [_plan!]).Marker;
+        Assert.That(marker?.ImageOnly, Is.True);
+        Assert.That(marker?.AlarmSoundEnabled, Is.True);
+        Assert.That(marker?.AlarmTone, Is.EqualTo("double-beep"));
+        Assert.That(marker?.AlarmVolume, Is.EqualTo(45));
+    }
+
+    [When("管理員為測點上傳 WAV 音效並儲存")]
+    public async Task WhenCustomAudioSaved()
+    {
+        PlayerSettings storage = new(_directory.FullName);
+        using MemoryStream stream = new("RIFF\0\0\0\0WAVE"u8.ToArray());
+        IFormFile upload = new FormFile(stream, 0, stream.Length, "alarmAudio", "提醒.wav");
+        string file = await storage.UploadAlarmAudioAsync(upload, CancellationToken.None);
+        Assert.That(storage.FindAlarmAudio(file), Is.Null);
+        PointPlan configured = _plan! with
+        {
+            AlarmSoundEnabled = true, AlarmTone = PointPlan.CustomAlarmTone,
+            AlarmAudioFile = file, AlarmAudioName = upload.FileName
+        };
+        Assert.That(storage.Save(storage.Read() with { PointPlans = [configured] }), Is.True);
+        _plan = storage.Read().PointPlans!.Single();
+    }
+
+    [Then("測點的自訂音效可讀取且不出現在日常或平面圖媒體中")]
+    public void ThenCustomAudioIsIsolated()
+    {
+        PlayerSettings storage = new(_directory.FullName);
+        string file = _plan!.AlarmAudioFile!;
+        Assert.That(_plan.AlarmAudioName, Is.EqualTo("提醒.wav"));
+        Assert.That(storage.FindAlarmAudio(file), Is.Not.Null);
+        Assert.That(storage.FindMedia(file), Is.Null);
+        Assert.That(storage.FindEngineeringMedia(file), Is.Null);
+    }
+
+    [When("上傳工程平面圖")]
+    public async Task WhenUploadFloorPlan()
+    {
+        byte[] png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jr9sAAAAASUVORK5CYII=");
+        using MemoryStream input = new(png);
+        IFormFile image = new FormFile(input, 0, input.Length, "images", "floor.png");
+        _file = await new PlayerSettings(_directory.FullName).UploadEngineeringAsync(image, CancellationToken.None);
+    }
+
+    [Then("工程圖庫可讀取圖片且日常管理找不到該圖片")]
+    public void ThenOnlyEngineeringCanRead()
+    {
+        PlayerSettings storage = new(_directory.FullName);
+        Assert.That(storage.FindEngineeringMedia(_file!), Is.Not.Null);
+        Assert.That(storage.FindMedia(_file!), Is.Null);
+    }
+
+    [Given("測點 A 設定自訂文字「(.*)」與指定尺寸")]
+    public void GivenCustomAlarmText(string text) =>
+        _plan = new PointPlan("A", "a.png", 25, 75, AlarmText: text, AlarmTextSize: 64, IconSize: 80);
+
+    [When("測點 A 回報 API 警報文字「(.*)」")]
+    public void WhenApiAlarm(string text) => _alarm = new Alarm("A", Description: text);
+
+    [Then("顯示文字「(.*)」並沿用設定尺寸與位置")]
+    public void ThenCustomAppearance(string text)
+    {
+        (Alarm? alarm, PointPlan? marker) = AlarmDisplay.SelectRegistered([_alarm!], [_plan!]);
+        Assert.That(alarm?.Description, Is.EqualTo(text));
+        Assert.That(marker, Is.EqualTo(_plan));
+    }
+
+    [When("清空測點 A 的自訂警報文字")]
+    public void WhenClearText() => _plan = _plan! with { AlarmText = " " };
+
+    [Then("顯示 API 警報文字「(.*)」")]
+    public void ThenApiText(string text) =>
+        Assert.That(AlarmDisplay.SelectRegistered([_alarm!], [_plan!]).Alarm?.Description, Is.EqualTo(text));
+
+    [Given("自動帶入測點描述「(.*)」")]
+    public void GivenSuggestedText(string text) => _suggested = text;
+
+    [When("保留帶入的文字儲存")]
+    public void WhenSaveSuggestion() => _override = AlarmDisplay.ResolveTextOverride(_suggested, _suggested);
+
+    [Then("設定維持使用 API 描述")]
+    public void ThenNoOverride() => Assert.That(_override, Is.Null);
+
+    [When("改為「(.*)」後儲存")]
+    public void WhenSaveEditedText(string text) => _override = AlarmDisplay.ResolveTextOverride(text, _suggested);
+
+    [Then("儲存為自訂文字「(.*)」")]
+    public void ThenOverrideSaved(string text) => Assert.That(_override, Is.EqualTo(text));
+
+    public void Dispose() => _directory.Delete(recursive: true);
+}

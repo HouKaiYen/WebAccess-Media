@@ -1,0 +1,57 @@
+name: Windows CI
+on:
+  push:
+    branches: [develop, master, 'feature/**', 'fix/**', 'release/**', 'hotfix/**']
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  pull_request:
+    branches: [develop, master]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet test --configuration Release
+      - run: dotnet publish src/WebAccess.Media -c Release -r win-x64 --self-contained -o artifacts/win-x64
+      - run: dotnet publish src/WebAccess.Media.Tray -c Release -r win-x64 --self-contained -o artifacts/win-x64/tray
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WebAccess-Media-win-x64
+          path: artifacts/win-x64
+          if-no-files-found: error
+  draft-release:
+    if: github.ref_type == 'tag'
+    needs: verify
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: 驗證正式版本標籤
+        run: |
+          git merge-base --is-ancestor HEAD refs/remotes/origin/master
+          if ($LASTEXITCODE -ne 0) {
+            throw '正式版本標籤必須指向已合併至 master 的提交。'
+          }
+          $tagType = git cat-file -t "refs/tags/$env:GITHUB_REF_NAME"
+          if ($LASTEXITCODE -ne 0 -or $tagType -ne 'tag') {
+            throw '請使用附有簡短版本說明的 annotated tag。'
+          }
+      - uses: actions/download-artifact@v4
+        with:
+          name: WebAccess-Media-win-x64
+          path: artifacts/win-x64
+      - name: 建立 Release 草稿
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $package = 'artifacts/WebAccess-Media-win-x64.zip'
+          Compress-Archive -Path 'artifacts/win-x64/*' -DestinationPath $package
+          gh release create "$env:GITHUB_REF_NAME" "$package" --repo "$env:GITHUB_REPOSITORY" --verify-tag --draft --notes-from-tag
