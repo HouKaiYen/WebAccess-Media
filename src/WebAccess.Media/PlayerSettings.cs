@@ -23,7 +23,16 @@ public sealed record PointPlan(string Point, string File, int X, int Y,
 public sealed record FloorImage(string File, string Name);
 
 public sealed record Playlist(int Revision, PlaylistItem[] Items, bool IsMuted, string Marquee, bool MarqueeAtTop,
-    PointPlan[]? PointPlans = null, FloorImage[]? FloorImages = null);
+    PointPlan[]? PointPlans = null, FloorImage[]? FloorImages = null,
+    int MarqueeFontSize = Playlist.DefaultMarqueeFontSize, int MarqueeSpeed = Playlist.DefaultMarqueeSpeed)
+{
+    public const int DefaultMarqueeFontSize = 30;
+    public const int MinMarqueeFontSize = 12;
+    public const int MaxMarqueeFontSize = 120;
+    public const int DefaultMarqueeSpeed = 80;
+    public const int MinMarqueeSpeed = 10;
+    public const int MaxMarqueeSpeed = 500;
+}
 
 public sealed class PlayerSettings(string directory)
 {

@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -11,6 +12,10 @@ public sealed class SettingsModel(PlayerSettings storage) : PageModel
     [BindProperty] public bool IsMuted { get; set; }
     [BindProperty] public bool MarqueeAtTop { get; set; }
     [BindProperty] public string? Marquee { get; set; }
+    [BindProperty, Range(Playlist.MinMarqueeFontSize, Playlist.MaxMarqueeFontSize)]
+    public int? MarqueeFontSize { get; set; }
+    [BindProperty, Range(Playlist.MinMarqueeSpeed, Playlist.MaxMarqueeSpeed)]
+    public int? MarqueeSpeed { get; set; }
     [BindProperty] public List<ItemInput> Items { get; set; } = [];
     [TempData] public string? Feedback { get; set; }
 
@@ -21,6 +26,8 @@ public sealed class SettingsModel(PlayerSettings storage) : PageModel
         IsMuted = playlist.IsMuted;
         MarqueeAtTop = playlist.MarqueeAtTop;
         Marquee = playlist.Marquee;
+        MarqueeFontSize = playlist.MarqueeFontSize;
+        MarqueeSpeed = playlist.MarqueeSpeed;
         Items = playlist.Items.Select(ItemInput.FromPlaylistItem).ToList();
     }
 
@@ -80,6 +87,14 @@ public sealed class SettingsModel(PlayerSettings storage) : PageModel
         {
             Feedback = "設定已更新，請檢查最新清單再編輯。";
         }
+        else if (ModelState[nameof(MarqueeFontSize)]?.Errors.Count > 0)
+        {
+            Feedback = $"跑馬燈文字大小須介於 {Playlist.MinMarqueeFontSize} 和 {Playlist.MaxMarqueeFontSize} 像素。";
+        }
+        else if (ModelState[nameof(MarqueeSpeed)]?.Errors.Count > 0)
+        {
+            Feedback = $"跑馬燈移動速度須介於 {Playlist.MinMarqueeSpeed} 和 {Playlist.MaxMarqueeSpeed} 像素／秒。";
+        }
         else if (!ModelState.IsValid || (Marquee?.Length ?? 0) > 500 || Items.Count != knownFiles.Count ||
             !knownFiles.SetEquals(Items.Select(item => item.File)) || Items.Any(item =>
                 string.IsNullOrWhiteSpace(item.Name) || item.Name.Length > 200 || item.Seconds is < 3 or > 300))
@@ -93,7 +108,9 @@ public sealed class SettingsModel(PlayerSettings storage) : PageModel
                 .Select(item => new PlaylistItem(item.File, item.Name.Trim(), item.Seconds)).ToArray();
             if (!storage.Save(playlist with
             {
-                Items = items, IsMuted = IsMuted, Marquee = Marquee?.Trim() ?? "", MarqueeAtTop = MarqueeAtTop
+                Items = items, IsMuted = IsMuted, Marquee = Marquee?.Trim() ?? "", MarqueeAtTop = MarqueeAtTop,
+                MarqueeFontSize = MarqueeFontSize ?? playlist.MarqueeFontSize,
+                MarqueeSpeed = MarqueeSpeed ?? playlist.MarqueeSpeed
             }))
             {
                 Feedback = "設定已更新，請檢查最新清單再編輯。";

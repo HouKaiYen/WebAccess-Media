@@ -4,6 +4,7 @@
 @{ Layout = "_ManagementLayout"; ViewData["Title"] = "日常管理"; }
 
 @section Styles {
+<link rel="stylesheet" href="/marquee.css">
 <style>
         .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
         .toolbar h2 { margin-right: auto; }
@@ -27,6 +28,10 @@
         [hidden] { display: none !important; }
         .options { display: grid; grid-template-columns: minmax(180px, .85fr) minmax(0, 1.15fr); align-items: start; gap: 1rem; }
         .options h2 { margin-bottom: .75rem; }
+        .marquee-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+        .marquee-field { display: grid; gap: .3rem; min-width: 0; }
+        .marquee-field:has(select) { grid-column: 1 / -1; }
+        .marquee-field input[type=number], .marquee-field select { width: 100%; min-width: 0; }
         .switch input { appearance: none; width: 2.1rem; height: 1.16rem; padding: 0; border: 0; border-radius: 2rem; background: #cdd6e5; cursor: pointer; }
         .switch input::before { display: block; width: .83rem; height: .83rem; margin: .165rem; border-radius: 50%; background: #fff; content: ""; }
         .switch input:checked { background: var(--accent); }
@@ -36,15 +41,8 @@
         .preview { position: relative; height: min(55vh, 480px); display: grid; place-items: center; background: #05090e; overflow: hidden; }
         .preview img, .preview video { max-width: 100%; max-height: 100%; }
         #preview-media { display: grid; place-items: center; width: 100%; height: 100%; overflow: hidden; }
-        #preview-marquee { position: absolute; inset-inline: 0; bottom: 0; background: #0d151edb; color: #fff; white-space: nowrap; overflow: hidden; }
-        #preview-marquee.top { top: 0; bottom: auto; }
-        #preview-marquee span { display: inline-block; padding-left: 100%; animation: preview-scroll 12s linear infinite; }
-        @@keyframes preview-scroll { to { transform: translateX(-100%); } }
-        @@media (prefers-reduced-motion: reduce) {
-            #preview-marquee { white-space: normal; overflow-wrap: anywhere; }
-            #preview-marquee span { display: block; padding: .3rem .5rem; animation: none; text-align: center; }
-        }
         @@media (max-width: 640px) { .options { grid-template-columns: 1fr; } header { position: static; } }
+        @@media (max-width: 420px) { .marquee-fields { grid-template-columns: 1fr; } }
 
         main { max-width: 1100px; margin: auto; padding: 1.25rem; }
 </style>
@@ -84,14 +82,35 @@
             <h2>跑馬燈</h2>
             <label for="Marquee">公告文字（留空停用）</label>
             <textarea asp-for="Marquee" rows="3" maxlength="500"></textarea>
-            <label><input asp-for="MarqueeAtTop">顯示在上方</label>
+            <div class="marquee-fields">
+                <div class="marquee-field">
+                    <label asp-for="MarqueeAtTop">顯示位置</label>
+                    <select asp-for="MarqueeAtTop">
+                        <option value="False">畫面下方</option>
+                        <option value="True">畫面上方</option>
+                    </select>
+                </div>
+                <div class="marquee-field">
+                    <label asp-for="MarqueeFontSize">文字大小（像素）</label>
+                    <input asp-for="MarqueeFontSize" type="number" required
+                           min="@WebAccess.Media.Playlist.MinMarqueeFontSize" max="@WebAccess.Media.Playlist.MaxMarqueeFontSize"
+                           data-default="@WebAccess.Media.Playlist.DefaultMarqueeFontSize">
+                </div>
+                <div class="marquee-field">
+                    <label asp-for="MarqueeSpeed">移動速度（像素／秒）</label>
+                    <input asp-for="MarqueeSpeed" type="number" required
+                           min="@WebAccess.Media.Playlist.MinMarqueeSpeed" max="@WebAccess.Media.Playlist.MaxMarqueeSpeed"
+                           data-default="@WebAccess.Media.Playlist.DefaultMarqueeSpeed">
+                </div>
+            </div>
         </section></div>
     </form>
 </main>
 <dialog id="preview-dialog" aria-label="待機畫面預覽">
     <form method="dialog" class="toolbar"><h2>待機畫面預覽</h2><button>關閉</button></form>
-    <div class="preview"><div id="preview-media"></div><div id="preview-marquee" hidden><span></span></div></div>
+    <div class="preview"><div id="preview-media"></div><div class="marquee" id="preview-marquee" hidden><span></span></div></div>
 </dialog>
+<script src="/marquee.js"></script>
 <script>
 const playlistForm = document.getElementById('playlist-form');
 const list = document.getElementById('playlist');
@@ -188,13 +207,14 @@ list.addEventListener('click', function (event) {
 });
 const dialog = document.getElementById('preview-dialog');
 const stage = document.getElementById('preview-media');
+const renderPreviewMarquee = createMarqueeRenderer(document.getElementById('preview-marquee'));
+function marqueeValue(id) {
+    const field = document.getElementById(id);
+    return field.validity.valid ? field.valueAsNumber : Number(field.dataset.default);
+}
 let timeout;
 document.getElementById('open-preview').addEventListener('click', () => {
     const rows = [...list.querySelectorAll('.row:not([hidden])')];
-    const ticker = document.getElementById('preview-marquee');
-    ticker.firstElementChild.textContent = document.getElementById('Marquee').value.trim();
-    ticker.hidden = !ticker.firstElementChild.textContent;
-    ticker.classList.toggle('top', document.getElementById('MarqueeAtTop').checked);
     function play(index) {
         const row = rows[index];
         const video = row.dataset.file.endsWith('.mp4');
@@ -219,6 +239,12 @@ document.getElementById('open-preview').addEventListener('click', () => {
         }
     }
     dialog.showModal();
+    renderPreviewMarquee({
+        marquee: document.getElementById('Marquee').value.trim(),
+        marqueeAtTop: document.getElementById('MarqueeAtTop').value === 'True',
+        marqueeFontSize: marqueeValue('MarqueeFontSize'),
+        marqueeSpeed: marqueeValue('MarqueeSpeed')
+    });
     if (rows.length) play(0);
     else stage.textContent = '播放清單目前是空的';
 });
