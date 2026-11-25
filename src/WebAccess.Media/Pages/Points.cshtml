@@ -6,6 +6,8 @@
     ViewData["Title"] = "工程設定";
     int initialX = Model.Selected?.X ?? WebAccess.Media.PointPlan.DefaultCoordinate;
     int initialY = Model.Selected?.Y ?? WebAccess.Media.PointPlan.DefaultCoordinate;
+    bool usesCustomTone = Model.Selected?.AlarmTone == WebAccess.Media.PointPlan.CustomAlarmTone;
+    string? storedAlarmAudioUrl = Model.Selected?.AlarmAudioFile is string audio ? $"/alarm-audio/{audio}" : null;
 }
 
 @section Actions {
@@ -367,6 +369,18 @@
                                     }
                                 </select>
                             </label>
+                            <label id="alarm-audio-field" hidden="@(!usesCustomTone)">
+                                自訂音檔
+                                <input name="alarmAudio" id="alarm-audio" type="file" accept=".mp3,.wav"
+                                       disabled="@(!usesCustomTone)" required="@(usesCustomTone && storedAlarmAudioUrl is null)"
+                                       data-existing-url="@storedAlarmAudioUrl"
+                                       data-max-megabytes="@WebAccess.Media.PlayerSettings.MaxAlarmAudioMegabytes">
+                                <small>支援 MP3 和 WAV，單檔上限 @WebAccess.Media.PlayerSettings.MaxAlarmAudioMegabytes MB。</small>
+                                @if (storedAlarmAudioUrl is not null)
+                                {
+                                    <small>目前音檔為 @Model.Selected?.AlarmAudioName</small>
+                                }
+                            </label>
                             <label>音量（%）
                                 <input name="alarmVolume" id="alarm-volume" type="number" required
                                        min="@WebAccess.Media.PointPlan.MinAlarmVolume" max="@WebAccess.Media.PointPlan.MaxAlarmVolume"
@@ -436,24 +450,52 @@ pointForm.addEventListener('change', markPointDirty);
 const soundEnabled = document.getElementById('alarm-sound-enabled');
 const soundFields = document.getElementById('alarm-sound-fields');
 const soundTone = document.getElementById('alarm-tone');
+const soundFile = document.getElementById('alarm-audio');
+const soundFileField = document.getElementById('alarm-audio-field');
 const soundVolume = document.getElementById('alarm-volume');
 const soundStatus = document.getElementById('alarm-sound-status');
 const soundPreview = new Audio();
-soundEnabled.addEventListener('change', () => {
+let temporarySound = null;
+function stopSoundPreview() {
+    soundPreview.pause();
+    if (temporarySound) URL.revokeObjectURL(temporarySound);
+    temporarySound = null;
+    soundStatus.textContent = '';
+}
+function updateSoundFields() {
     soundFields.hidden = !soundEnabled.checked;
     soundFields.disabled = !soundEnabled.checked;
-    soundPreview.pause();
-    soundStatus.textContent = '';
+    const usesCustomTone = soundTone.value === 'custom';
+    soundFileField.hidden = !usesCustomTone;
+    soundFile.disabled = !usesCustomTone;
+    soundFile.required = usesCustomTone && !soundFile.dataset.existingUrl;
+    stopSoundPreview();
+}
+soundEnabled.addEventListener('change', updateSoundFields);
+soundTone.addEventListener('change', updateSoundFields);
+soundFile.addEventListener('change', () => {
+    const selected = soundFile.files[0];
+    const maxMegabytes = Number(soundFile.dataset.maxMegabytes);
+    soundFile.setCustomValidity(selected?.size > maxMegabytes * 1024 * 1024 ? '音檔超過 ' + maxMegabytes + ' MB，請選擇較小的檔案。' : '');
+    stopSoundPreview();
 });
+soundPreview.addEventListener('ended', stopSoundPreview);
 document.getElementById('preview-alarm-sound').addEventListener('click', async () => {
     if (!soundVolume.reportValidity()) return;
-    soundStatus.textContent = '';
-    soundPreview.src = '/alarm-sounds/' + encodeURIComponent(soundTone.value) + '.wav';
+    stopSoundPreview();
+    if (soundTone.value === 'custom') {
+        if (!soundFile.reportValidity()) return;
+        const selected = soundFile.files[0];
+        temporarySound = selected ? URL.createObjectURL(selected) : null;
+        soundPreview.src = temporarySound || soundFile.dataset.existingUrl;
+    } else {
+        soundPreview.src = '/alarm-sounds/' + encodeURIComponent(soundTone.value) + '.wav';
+    }
     soundPreview.volume = soundVolume.valueAsNumber / 100;
     try {
         await soundPreview.play();
     } catch (error) {
-        if (error.name !== 'AbortError') soundStatus.textContent = '無法播放音效，請確認瀏覽器播放權限後再試。';
+        if (error.name !== 'AbortError') soundStatus.textContent = '無法播放音效，請確認音檔與瀏覽器播放權限。';
     }
 });
 function revealField(field) {

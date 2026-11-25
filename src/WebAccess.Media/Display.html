@@ -167,16 +167,17 @@ async function playAlarmSound() {
 playAlarmSoundButton.addEventListener('click', playAlarmSound);
 function updateAlarmSound(alarm, appearance) {
   const tone = alarm && appearance?.alarmSoundEnabled ? appearance.alarmTone : null;
-  const nextSound = tone ? JSON.stringify([alarm.point, tone]) : null;
-  if (tone) alarmAudio.volume = appearance.alarmVolume / 100;
+  const source = tone === 'custom' ? appearance.alarmSoundUrl : tone ? '/alarm-sounds/' + encodeURIComponent(tone) + '.wav' : null;
+  const nextSound = source ? JSON.stringify([alarm.point, source]) : null;
+  if (source) alarmAudio.volume = appearance.alarmVolume / 100;
   if (activeSound === nextSound) return;
 
   activeSound = nextSound;
   soundAttempt++;
   alarmAudio.pause();
   playAlarmSoundButton.hidden = true;
-  if (tone) {
-    alarmAudio.src = '/alarm-sounds/' + encodeURIComponent(tone) + '.wav';
+  if (source) {
+    alarmAudio.src = source;
     playAlarmSound();
   }
 }

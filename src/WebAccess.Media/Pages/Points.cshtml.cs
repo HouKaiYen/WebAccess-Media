@@ -10,7 +10,8 @@ public sealed class PointsModel(
     public static IReadOnlyList<(string Value, string Label)> AlarmIcons { get; } =
         [("sos", "SOS 圓牌"), ("triangle", "警告三角"), ("dot", "色彩圓點"), ("button", "緊急押鈕"), ("custom", "自訂圖示")];
     public static IReadOnlyList<(string Value, string Label)> AlarmTones { get; } =
-        [(PointPlan.DefaultAlarmTone, "柔和提示"), ("double-beep", "雙音提示"), ("pulse", "急促提示")];
+        [(PointPlan.DefaultAlarmTone, "柔和提示"), ("double-beep", "雙音提示"), ("pulse", "急促提示"),
+            (PointPlan.CustomAlarmTone, "自訂音效")];
     public PointPlan[] Plans { get; private set; } = [];
     public PointPlan? Selected { get; private set; }
     public string? CurrentAlarmText { get; private set; }
@@ -153,7 +154,7 @@ public sealed class PointsModel(
         string icon = PointPlan.DefaultIcon, bool flash = false, bool imageOnly = false, IFormFile? customIcon = null,
         string? alarmText = null, int alarmTextSize = PointPlan.DefaultAlarmTextSize, int iconSize = PointPlan.DefaultIconSize,
         string? suggestedAlarmText = null, bool addNext = false,
-        bool? alarmSoundEnabled = null, string? alarmTone = null, int? alarmVolume = null)
+        bool? alarmSoundEnabled = null, string? alarmTone = null, int? alarmVolume = null, IFormFile? alarmAudio = null)
     {
         string? invalidField = ModelState.FirstOrDefault(entry => entry.Value?.Errors.Count > 0).Key;
         if (invalidField is not null)
@@ -227,8 +228,17 @@ public sealed class PointsModel(
         {
             return PointError("請上傳 PNG 或 JPEG 自訂圖示。", 400, name, isNew, "customIcon");
         }
+        bool isSoundEnabled = alarmSoundEnabled ?? previous?.AlarmSoundEnabled ?? false;
+        string tone = alarmTone ?? previous?.AlarmTone ?? PointPlan.DefaultAlarmTone;
+        bool usesCustomAudio = isSoundEnabled && tone == PointPlan.CustomAlarmTone;
+        if (usesCustomAudio && alarmAudio is null &&
+            (previous?.AlarmAudioFile is not string storedAudio || storage.FindAlarmAudio(storedAudio) is null))
+        {
+            return PointError("請上傳 MP3 或 WAV 自訂音效。", 400, name, isNew, "alarmAudio");
+        }
 
         List<string> uploaded = [];
+        string? newAlarmAudio = null;
         bool saved = false;
         string? uploadingField = null;
         try
@@ -248,6 +258,11 @@ public sealed class PointsModel(
                 iconFile = await storage.UploadEngineeringAsync(customIcon, HttpContext.RequestAborted);
                 uploaded.Add(iconFile);
             }
+            if (usesCustomAudio && alarmAudio is not null)
+            {
+                uploadingField = "alarmAudio";
+                newAlarmAudio = await storage.UploadAlarmAudioAsync(alarmAudio, HttpContext.RequestAborted);
+            }
             PointPlan updated = imageOnly
                 ? (previous ?? new PointPlan(name, file, PointPlan.DefaultCoordinate, PointPlan.DefaultCoordinate))
                     with { File = file, ImageOnly = true }
@@ -255,15 +270,18 @@ public sealed class PointsModel(
                     AlarmDisplay.ResolveTextOverride(alarmText, suggestedAlarmText), alarmTextSize, iconSize);
             updated = updated with
             {
-                AlarmSoundEnabled = alarmSoundEnabled ?? previous?.AlarmSoundEnabled ?? false,
-                AlarmTone = alarmTone ?? previous?.AlarmTone ?? PointPlan.DefaultAlarmTone,
-                AlarmVolume = alarmVolume ?? previous?.AlarmVolume ?? PointPlan.DefaultAlarmVolume
+                AlarmSoundEnabled = isSoundEnabled,
+                AlarmTone = tone,
+                AlarmVolume = alarmVolume ?? previous?.AlarmVolume ?? PointPlan.DefaultAlarmVolume,
+                AlarmAudioFile = newAlarmAudio ?? previous?.AlarmAudioFile,
+                AlarmAudioName = newAlarmAudio is null ? previous?.AlarmAudioName : Path.GetFileName(alarmAudio!.FileName)
             };
             PointPlan[] plans = playlist.PointPlans ?? [];
             plans = previous is null ? [.. plans, updated] : plans.Select(plan => plan.Point == name ? updated : plan).ToArray();
             saved = storage.Save(playlist with { PointPlans = plans, FloorImages = floorImages });
             if (!saved)
             {
+                storage.RemoveUnusedAlarmAudio(newAlarmAudio);
                 return PointError("設定已在其他地方更新。請先確認最新內容。", 409, name, isNew);
             }
             Feedback = imageOnly ? "已儲存測點平面圖。" : "已儲存測點平面圖及告警圖示。";
@@ -286,6 +304,10 @@ public sealed class PointsModel(
         if (isNew && addNext)
         {
             Feedback = $"已儲存「{name}」，可以新增下一個測點。";
+        }
+        if (newAlarmAudio is not null && !storage.RemoveUnusedAlarmAudio(previous?.AlarmAudioFile))
+        {
+            Feedback += "舊音檔暫時無法刪除。";
         }
         return WantsJson()
             ? new JsonResult(new { redirect = Url.Page("Points", destination) })
@@ -311,10 +333,15 @@ public sealed class PointsModel(
     public IActionResult OnPostRemove(string point, string? selected, bool add = false)
     {
         Playlist playlist = storage.Read();
-        Feedback = storage.Save(playlist with
+        bool saved = storage.Save(playlist with
         {
             PointPlans = (playlist.PointPlans ?? []).Where(plan => plan.Point != point).ToArray()
-        }) ? "已移除測點頁面。" : "設定已更新，請再試一次。";
+        });
+        Feedback = saved ? "已移除測點頁面。" : "設定已更新，請再試一次。";
+        if (saved && !storage.RemoveUnusedAlarmAudio(playlist.PointPlans?.FirstOrDefault(plan => plan.Point == point)?.AlarmAudioFile))
+        {
+            Feedback += "自訂音檔暫時無法刪除。";
+        }
         return RedirectToPage(new { selected = selected == point ? null : selected, add });
     }
 }
