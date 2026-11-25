@@ -1,6 +1,7 @@
 using NUnit.Framework;
 using Reqnroll;
 using WebAccess.Media;
+using WebAccess.Media.Pages;
 
 [Binding]
 public sealed class PlayerSettingsSteps : IDisposable
@@ -44,6 +45,19 @@ public sealed class PlayerSettingsSteps : IDisposable
     [Then("重載後按照新的順序播放")]
     public void ThenOrderPersists() =>
         Assert.That(Open().Read().Items.Select(item => item.Name), Is.EqualTo(new[] { "B", "A" }));
+
+    [Then("日常管理會依設定顯示預設位置或自訂資料夾")]
+    public void ThenStorageLocationIsDisplayed()
+    {
+        PlayerSettings defaultStorage = new(PlayerSettings.DefaultDirectory);
+        SettingsModel defaultPage = new(defaultStorage);
+        SettingsModel customPage = new(Open());
+        string expectedDefault = OperatingSystem.IsWindows()
+            ? @"%LOCALAPPDATA%\WebAccess-Media"
+            : PlayerSettings.DefaultDirectory;
+        Assert.That(defaultPage.StorageLocation, Is.EqualTo(expectedDefault));
+        Assert.That(customPage.StorageLocation, Is.EqualTo(_directory.FullName));
+    }
 
     [Given("舊版待機設定將公告顯示在上方")]
     public void GivenLegacyMarquee() =>

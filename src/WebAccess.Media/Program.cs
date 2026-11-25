@@ -14,8 +14,7 @@ if (OperatingSystem.IsWindows() && Environment.UserInteractive && args.Length ==
     builder.Configuration["urls"] ??= "http://127.0.0.1:3008";
     builder.Configuration["Tray:Enabled"] ??= "true";
 }
-string settingsDirectory = builder.Configuration["Storage:Directory"] ?? Path.Combine(
-    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WebAccess-Media");
+string settingsDirectory = builder.Configuration["Storage:Directory"] ?? PlayerSettings.DefaultDirectory;
 builder.Configuration["Storage:Directory"] = Path.GetFullPath(settingsDirectory);
 IDataProtectionBuilder protection = builder.Services.AddDataProtection()
     .SetApplicationName("WebAccess-Media")

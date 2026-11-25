@@ -28,6 +28,12 @@ public sealed class SettingsModel(PlayerSettings storage) : PageModel
     [BindProperty] public List<ItemInput> Items { get; set; } = [];
     [TempData] public string? Feedback { get; set; }
 
+    public string StorageLocation => OperatingSystem.IsWindows() &&
+        string.Equals(Path.TrimEndingDirectorySeparator(storage.StorageDirectory), PlayerSettings.DefaultDirectory,
+            StringComparison.OrdinalIgnoreCase)
+        ? @"%LOCALAPPDATA%\WebAccess-Media"
+        : storage.StorageDirectory;
+
     public void OnGet()
     {
         Playlist playlist = storage.Read();

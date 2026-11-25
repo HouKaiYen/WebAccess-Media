@@ -28,6 +28,9 @@
         [hidden] { display: none !important; }
         .options { display: grid; grid-template-columns: minmax(180px, .85fr) minmax(0, 1.15fr); align-items: start; gap: 1rem; }
         .options h2 { margin-bottom: .75rem; }
+        .storage-location h2 { margin: 0 0 .35rem; font-size: .95rem; }
+        .storage-location p { margin: .35rem 0 0; }
+        .storage-location code { color: var(--text); overflow-wrap: anywhere; user-select: all; }
         .marquee-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .75rem; }
         .marquee-heading h2 { margin: 0; }
         .marquee-heading .switch { min-height: 2.75rem; cursor: pointer; }
@@ -225,6 +228,11 @@
             </details>
         </section></div>
     </form>
+    <section class="card storage-location" aria-labelledby="storage-location-title">
+        <h2 id="storage-location-title">資料儲存位置</h2>
+        <p><code id="storage-location-path">@Model.StorageLocation</code></p>
+        <p class="muted">播放清單、跑馬燈、測點設定與上傳檔案都存放在這裡。</p>
+    </section>
 </main>
 <dialog id="media-library" aria-labelledby="media-library-title">
     <form method="dialog" class="toolbar"><h2 id="media-library-title">現有媒體</h2><button id="close-media-library">關閉</button></form>
