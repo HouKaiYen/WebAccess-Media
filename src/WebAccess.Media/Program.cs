@@ -8,6 +8,12 @@ WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationO
     Args = args,
     WebRootPath = Directory.Exists(publishedWebRoot) ? publishedWebRoot : null
 });
+if (OperatingSystem.IsWindows() && Environment.UserInteractive && args.Length == 0 &&
+    File.Exists(Path.Combine(AppContext.BaseDirectory, "tray", "WebAccess.Media.Tray.exe")))
+{
+    builder.Configuration["urls"] ??= "http://127.0.0.1:3008";
+    builder.Configuration["Tray:Enabled"] ??= "true";
+}
 string settingsDirectory = builder.Configuration["Storage:Directory"] ?? Path.Combine(
     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WebAccess-Media");
 builder.Configuration["Storage:Directory"] = Path.GetFullPath(settingsDirectory);

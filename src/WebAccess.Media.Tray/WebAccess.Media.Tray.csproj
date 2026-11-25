@@ -6,8 +6,10 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>../../assets/WebAccessMedia.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../WebAccess.Media/WindowsStartupTasks.cs" Link="WindowsStartupTasks.cs" />
+    <EmbeddedResource Include="../../assets/WebAccessMedia.ico" LogicalName="WebAccess.Media.Tray.AppIcon" />
   </ItemGroup>
 </Project>
