@@ -103,6 +103,12 @@ dotnet publish src/WebAccess.Media.Tray -c Release -r win-x64 --self-contained -
 
 BDD 規格位於 `tests/WebAccess.Media.Bdd`，使用繁體中文 Gherkin、Reqnroll 及 NUnit。Windows CI 執行測試並上傳自包含套件。測試使用 WebAccess 回應替身，現場告警與播放器相容性依「現場驗收」步驟確認。
 
+### GitHub 版本發布
+
+日常開發合併至 `develop`，`feature/*`、`fix/*`、`release/*` 和 `hotfix/*` 分支的推送也會執行 Windows CI。準備發布時，由 `release/*` 分支驗收並合併至 `master`。在正式提交建立 `vX.Y.Z` 格式的 annotated tag，標籤訊息記錄本版新增或修正的內容。
+
+推送標籤後，Windows CI 通過才會建立 GitHub Release 草稿，附上 `WebAccess-Media-win-x64.zip` 並以標籤訊息作為版本說明。確認草稿後即可從 GitHub Releases 發布。
+
 ## 目前版本範圍
 
 支援工程連線、WebAccess 測點選取、共用平面圖與拖曳定位、告警圖示、待機輪播及跑馬燈。同時有多個已新增測點告警時，依 API 清單順序顯示第一個。PDF 輪播、待機共用媒體庫、系統匣、開機自啟與 MSI 安裝屬後續版本。
