@@ -1,5 +1,7 @@
 using NUnit.Framework;
 using Reqnroll;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.Configuration;
 using WebAccess.Media;
 using WebAccess.Media.Pages;
 
@@ -46,12 +48,17 @@ public sealed class PlayerSettingsSteps : IDisposable
     public void ThenOrderPersists() =>
         Assert.That(Open().Read().Items.Select(item => item.Name), Is.EqualTo(new[] { "B", "A" }));
 
-    [Then("日常管理會依設定顯示預設位置或自訂資料夾")]
+    [Then("工程設定會依設定顯示預設位置或自訂資料夾")]
     public void ThenStorageLocationIsDisplayed()
     {
         PlayerSettings defaultStorage = new(PlayerSettings.DefaultDirectory);
-        SettingsModel defaultPage = new(defaultStorage);
-        SettingsModel customPage = new(Open());
+        using HttpClient httpClient = new();
+        WebAccessClient client = new(httpClient);
+        EngineeringSettings connection = new(_directory.FullName,
+            new EphemeralDataProtectionProvider().CreateProtector("test"), client);
+        using WebAccessAlarmMonitor monitor = new(client, connection, new ConfigurationBuilder().Build());
+        PointsModel defaultPage = new(defaultStorage, connection, client, monitor);
+        PointsModel customPage = new(Open(), connection, client, monitor);
         string expectedDefault = OperatingSystem.IsWindows()
             ? @"%LOCALAPPDATA%\WebAccess-Media"
             : PlayerSettings.DefaultDirectory;
