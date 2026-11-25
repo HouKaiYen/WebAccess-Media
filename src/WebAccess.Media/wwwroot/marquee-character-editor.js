@@ -3,170 +3,172 @@ function normalizeMarqueeText(value) {
 }
 
 function setupMarqueeCharacterEditor(textInput, readSettings, markDirty) {
+    const editor = document.getElementById('marquee-rich-text');
     const hiddenStyles = document.getElementById('MarqueeCharacterStyles');
-    const hint = document.getElementById('marquee-character-hint');
-    if (typeof Intl.Segmenter !== 'function') {
-        hint.textContent = '請用支援逐字樣式的新版瀏覽器編輯。';
-        const initialText = normalizeMarqueeText(textInput.value);
+    if (typeof Intl.Segmenter !== 'function' || !editor.isContentEditable) {
+        const original = normalizeMarqueeText(textInput.value);
+        const originalStyles = hiddenStyles.value;
         textInput.addEventListener('input', () => {
-            if (normalizeMarqueeText(textInput.value) !== initialText) hiddenStyles.value = '[]';
+            hiddenStyles.value = normalizeMarqueeText(textInput.value) === original ? originalStyles : '[]';
         });
         return;
     }
 
+    const tools = document.getElementById('marquee-range-tools');
+    const status = document.getElementById('marquee-editor-status');
+    const color = document.getElementById('marquee-range-color');
+    const size = document.getElementById('marquee-range-size');
+    const weight = document.getElementById('marquee-range-weight');
+    const clear = document.getElementById('reset-marquee-range');
     const segmenter = new Intl.Segmenter('zh-Hant', { granularity: 'grapheme' });
-    const list = document.getElementById('marquee-character-list');
-    const controls = document.getElementById('marquee-character-controls');
-    const selectedCharacter = document.getElementById('marquee-selected-character');
-    const color = document.getElementById('marquee-character-color');
-    const resetColor = document.getElementById('reset-marquee-character-color');
-    const size = document.getElementById('marquee-character-size');
-    const weight = document.getElementById('marquee-character-weight');
-    const sample = document.getElementById('marquee-character-sample');
-    const defaultHint = hint.textContent;
-    let text = normalizeMarqueeText(textInput.value);
-    let characters = splitCharacters(text);
-    let selectedIndex = 0;
+    const history = [];
+    const redo = [];
+    let text = textInput.value;
+    let characters = splitCharacters(text, readSettings().marqueeCharacterStyles);
+    let selection = { start: 0, end: 0 };
     let edit = null;
+    let composing = false;
 
-    function splitCharacters(value) {
-        return Array.from(segmenter.segment(value), ({ segment, index }) => ({ segment, index, style: {} }));
+    function splitCharacters(value, styles = []) {
+        const overrides = new Map((styles ?? []).map(style => [style.start, style]));
+        return Array.from(segmenter.segment(value), ({ segment, index }) => {
+            const saved = overrides.get(index);
+            const style = {};
+            if (saved?.length === segment.length) {
+                for (const property of ['textColor', 'fontSize', 'fontWeight']) {
+                    if (saved[property] != null) style[property] = saved[property];
+                }
+            }
+            return { segment, index, style };
+        });
     }
 
-    function characterLabel(segment) {
-        if (segment === '\n') return '換行';
-        return /^\p{White_Space}+$/u.test(segment) ? '空白' : segment;
+    function collectStyles(start = 0, end = text.length) {
+        return characters.filter(character =>
+            character.index >= start && character.index + character.segment.length <= end && Object.keys(character.style).length
+        ).map(character => ({ start: character.index - start, length: character.segment.length, ...character.style }));
     }
 
-    function hasStyle(character) {
-        return Object.keys(character.style).length > 0;
+    function snapshot(range = selection) {
+        return { text, styles: collectStyles(), selection: range };
     }
 
-    function updateButton(button, index) {
-        const selected = index === selectedIndex;
-        const character = characters[index];
-        const styled = hasStyle(character);
-        button.tabIndex = selected ? 0 : -1;
-        button.setAttribute('aria-pressed', String(selected));
-        button.toggleAttribute('data-styled', styled);
-        button.setAttribute('aria-label', '第 ' + (index + 1) + ' 字 ' + characterLabel(character.segment) + (styled ? '，有自訂樣式' : ''));
+    function remember(range) {
+        history.push(snapshot(range));
+        if (history.length > 50) history.shift();
+        redo.length = 0;
     }
 
-    function showSelection() {
-        const character = characters[selectedIndex];
-        if (!character) return;
-        selectedCharacter.textContent = '第 ' + (selectedIndex + 1) + ' 字「' + characterLabel(character.segment) + '」';
-        color.value = character.style.textColor || document.getElementById('MarqueeTextColor').value;
-        size.value = character.style.fontSize ?? '';
-        weight.value = character.style.fontWeight ?? '';
-        resetColor.disabled = !character.style.textColor;
+    function selectionInsideEditor() {
+        const current = window.getSelection();
+        if (!current?.rangeCount) return null;
+        const range = current.getRangeAt(0);
+        if (!editor.contains(range.startContainer) || !editor.contains(range.endContainer)) return null;
+        const prefix = document.createRange();
+        prefix.selectNodeContents(editor);
+        prefix.setEnd(range.startContainer, range.startOffset);
+        const start = prefix.toString().length;
+        prefix.setEnd(range.endContainer, range.endOffset);
+        return { start, end: prefix.toString().length };
     }
 
-    function updateSample() {
-        const settings = readSettings();
-        applyMarqueeAppearance(sample, settings);
-        renderMarqueeText(sample, settings.marquee, settings.marqueeCharacterStyles);
+    function rangeForSelection() {
+        const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        range.collapse(false);
+        let offset = 0;
+        let hasStart = false;
+        let node = walker.nextNode();
+        while (node) {
+            const end = offset + node.length;
+            if (!hasStart && selection.start <= end) {
+                range.setStart(node, selection.start - offset);
+                hasStart = true;
+            }
+            if (selection.end <= end) {
+                range.setEnd(node, selection.end - offset);
+                break;
+            }
+            offset = end;
+            node = walker.nextNode();
+        }
+        return range;
     }
 
-    function writeStyles() {
-        const styles = characters.filter(hasStyle).map(character => ({
-            start: character.index, length: character.segment.length, ...character.style
-        }));
-        hiddenStyles.value = JSON.stringify(styles);
-        updateSample();
+    function selectedCharacters() {
+        if (selection.start === selection.end) return [];
+        return characters.filter(character =>
+            character.index < selection.end && character.index + character.segment.length > selection.start);
     }
 
-    function renderButtons() {
-        list.replaceChildren(...characters.map((character, index) => {
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.dataset.index = index;
-            button.textContent = characterLabel(character.segment);
-            updateButton(button, index);
-            return button;
-        }));
-        list.hidden = controls.hidden = characters.length === 0;
-        hint.textContent = characters.length ? defaultHint : '輸入公告文字後即可逐字編輯。';
-        showSelection();
+    function uniformStyle(selected, property) {
+        const first = selected[0]?.style[property];
+        return selected.every(character => character.style[property] === first) ? first : null;
     }
 
-    function selectCharacter(index) {
-        const previous = selectedIndex;
-        selectedIndex = index;
-        updateButton(list.children[previous], previous);
-        updateButton(list.children[index], index);
-        showSelection();
+    function updateToolbar() {
+        const selected = selectedCharacters();
+        tools.disabled = selected.length === 0;
+        status.textContent = selected.length ? '已選取 ' + selected.length + ' 個字元' : '反白選取文字後，可套用格式。';
+        if (selected.length) {
+            const selectedSize = uniformStyle(selected, 'fontSize');
+            const selectedWeight = uniformStyle(selected, 'fontWeight');
+            color.value = uniformStyle(selected, 'textColor') || document.getElementById('MarqueeTextColor').value;
+            if (document.activeElement !== size) size.value = selectedSize ?? '';
+            size.placeholder = selectedSize === null ? '混合' : '沿用全文';
+            weight.options[0].textContent = selectedWeight === null ? '混合' : '沿用全文';
+            weight.value = selectedWeight ?? '';
+            clear.disabled = !selected.some(character => Object.keys(character.style).length);
+        }
+        const highlights = globalThis.CSS?.highlights;
+        if (highlights && typeof Highlight === 'function') {
+            if (selected.length && document.activeElement !== editor) {
+                highlights.set('marquee-selection', new Highlight(rangeForSelection()));
+            } else {
+                highlights.delete('marquee-selection');
+            }
+        }
     }
 
-    function changeStyle(property, value) {
-        const style = characters[selectedIndex].style;
-        if (value === null) delete style[property];
-        else style[property] = value;
-        updateButton(list.children[selectedIndex], selectedIndex);
-        resetColor.disabled = !style.textColor;
-        writeStyles();
+    function render(restoreCaret = document.activeElement === editor) {
+        renderMarqueeText(editor, text, collectStyles());
+        if (restoreCaret) {
+            const current = window.getSelection();
+            current.removeAllRanges();
+            current.addRange(rangeForSelection());
+        }
+        updateToolbar();
+    }
+
+    function writeDraft() {
+        const start = text.match(/^\p{White_Space}*/u)[0].length;
+        const end = start + normalizeMarqueeText(text).length;
+        textInput.value = text;
+        hiddenStyles.value = JSON.stringify(collectStyles(start, end));
         markDirty();
     }
 
-    const savedStyles = new Map((readSettings().marqueeCharacterStyles ?? []).map(style => [style.start, style]));
-    for (const character of characters) {
-        const saved = savedStyles.get(character.index);
-        if (!saved || saved.length !== character.segment.length) continue;
-        for (const property of ['textColor', 'fontSize', 'fontWeight']) {
-            if (saved[property] != null) character.style[property] = saved[property];
-        }
-    }
-    renderButtons();
-    updateSample();
-
-    list.addEventListener('click', event => {
-        const button = event.target.closest('button[data-index]');
-        if (button) selectCharacter(Number(button.dataset.index));
-    });
-    list.addEventListener('keydown', event => {
-        const offsets = { ArrowLeft: selectedIndex - 1, ArrowRight: selectedIndex + 1, Home: 0, End: characters.length - 1 };
-        if (!Object.hasOwn(offsets, event.key)) return;
-        event.preventDefault();
-        const index = Math.max(0, Math.min(characters.length - 1, offsets[event.key]));
-        selectCharacter(index);
-        list.children[index].focus();
-    });
-    color.addEventListener('input', () => changeStyle('textColor', color.value));
-    resetColor.addEventListener('click', () => {
-        changeStyle('textColor', null);
-        showSelection();
-        color.focus();
-    });
-    size.addEventListener('input', () => {
-        if (size.validity.valid) changeStyle('fontSize', size.value ? size.valueAsNumber : null);
-    });
-    weight.addEventListener('change', () => changeStyle('fontWeight', weight.value ? Number(weight.value) : null));
-    textInput.form.addEventListener('input', event => {
-        if (!['MarqueeTextColor', 'MarqueeBackgroundColor', 'MarqueeBackgroundOpacity', 'MarqueeFontWeight', 'MarqueeFontSize'].includes(event.target.id)) return;
-        if (characters.length && event.target.id === 'MarqueeTextColor') {
-            color.value = characters[selectedIndex].style.textColor || event.target.value;
-        }
-        updateSample();
-    });
-
-    textInput.addEventListener('beforeinput', event => {
-        edit = { value: textInput.value, start: textInput.selectionStart, end: textInput.selectionEnd, type: event.inputType };
-    });
-    textInput.addEventListener('input', () => {
-        const nextText = normalizeMarqueeText(textInput.value);
-        const editDetails = edit;
+    function updateText(nextText, caret, previousRange, inputType) {
         edit = null;
-        if (nextText === text) return;
-
-        const next = splitCharacters(nextText);
-        let untouchedEnd = Infinity;
-        if (editDetails) {
-            // 用游標判斷從哪裡開始修改，避免連續相同的字把樣式移到另一個字。
-            const removed = editDetails.start === editDetails.end && editDetails.type.endsWith('Backward')
-                ? Math.max(0, editDetails.value.length - textInput.value.length) : 0;
-            const leading = editDetails.value.match(/^\p{White_Space}*/u)[0].length;
-            untouchedEnd = Math.max(0, editDetails.start - removed - leading);
+        if (nextText.length > textInput.maxLength) {
+            selection = previousRange;
+            render();
+            status.textContent = '公告文字上限為 500 字元。';
+            return;
         }
+        selection = { start: Math.min(caret.start, nextText.length), end: Math.min(caret.end, nextText.length) };
+        if (nextText === text) {
+            render();
+            return;
+        }
+
+        remember(previousRange);
+        const next = splitCharacters(nextText);
+        // 用編輯前的游標區分相鄰的相同字，讓保留的字沿用原有格式。
+        const deletedBeforeCaret = inputType?.endsWith('Backward') && previousRange.start === previousRange.end
+            ? Math.max(0, text.length - nextText.length) : 0;
+        const untouchedEnd = previousRange.start - deletedBeforeCaret;
         let prefix = 0;
         while (prefix < characters.length && prefix < next.length &&
             characters[prefix].index + characters[prefix].segment.length <= untouchedEnd &&
@@ -174,19 +176,137 @@ function setupMarqueeCharacterEditor(textInput, readSettings, markDirty) {
             next[prefix].style = characters[prefix].style;
             prefix++;
         }
-        let previousIndex = characters.length - 1;
-        let nextIndex = next.length - 1;
-        while (previousIndex >= prefix && nextIndex >= prefix &&
-            characters[previousIndex].segment === next[nextIndex].segment) {
-            next[nextIndex].style = characters[previousIndex].style;
-            previousIndex--;
-            nextIndex--;
+        let oldIndex = characters.length - 1;
+        let newIndex = next.length - 1;
+        while (oldIndex >= prefix && newIndex >= prefix && characters[oldIndex].segment === next[newIndex].segment) {
+            next[newIndex].style = characters[oldIndex].style;
+            oldIndex--;
+            newIndex--;
         }
-        if (selectedIndex > previousIndex) selectedIndex += next.length - characters.length;
-        selectedIndex = Math.max(0, Math.min(next.length - 1, selectedIndex));
         characters = next;
         text = nextText;
-        renderButtons();
-        writeStyles();
+        writeDraft();
+        render();
+    }
+
+    function synchronizeInput() {
+        const next = editor.querySelector('br, div, p') ? editor.innerText : editor.textContent;
+        const previousRange = edit?.selection ?? selection;
+        updateText(next, selectionInsideEditor() ?? previousRange, previousRange, edit?.type);
+    }
+
+    function insertText(value) {
+        const range = selectionInsideEditor() ?? selection;
+        const available = textInput.maxLength - (text.length - (range.end - range.start));
+        const normalized = value.replace(/\r\n?/g, '\n');
+        const inserted = Array.from(segmenter.segment(normalized))
+            .filter(({ segment, index }) => index + segment.length <= available)
+            .map(({ segment }) => segment).join('');
+        const caret = range.start + inserted.length;
+        updateText(text.slice(0, range.start) + inserted + text.slice(range.end), { start: caret, end: caret }, range, 'insertText');
+    }
+
+    function restoreHistory(source, destination) {
+        const previous = source.pop();
+        if (!previous) return;
+        destination.push(snapshot());
+        text = previous.text;
+        characters = splitCharacters(text, previous.styles);
+        selection = previous.selection;
+        writeDraft();
+        render(true);
+    }
+
+    function formatSelected(update) {
+        const selected = selectedCharacters();
+        if (!selected.length) return;
+        remember();
+        for (const character of selected) update(character);
+        writeDraft();
+        render();
+    }
+
+    function setFormat(property, value) {
+        formatSelected(character => {
+            if (value === null) delete character.style[property];
+            else character.style[property] = value;
+        });
+    }
+
+    function captureSelection() {
+        const range = selectionInsideEditor();
+        if (!range) return;
+        selection = range;
+        updateToolbar();
+    }
+
+    textInput.hidden = true;
+    document.getElementById('marquee-editor').hidden = false;
+    applyMarqueeAppearance(editor, readSettings());
+    render(false);
+    document.getElementById('marquee-text-label').addEventListener('click', event => {
+        event.preventDefault();
+        editor.focus();
+    });
+
+    document.addEventListener('selectionchange', () => {
+        if (!composing && document.activeElement === editor) captureSelection();
+    });
+    editor.addEventListener('blur', updateToolbar);
+    tools.addEventListener('pointerdown', () => {
+        if (document.activeElement === editor) captureSelection();
+    });
+    color.addEventListener('input', () => setFormat('textColor', color.value));
+    size.addEventListener('input', () => {
+        if (size.validity.valid) setFormat('fontSize', size.value ? size.valueAsNumber : null);
+    });
+    weight.addEventListener('change', () => setFormat('fontWeight', weight.value ? Number(weight.value) : null));
+    clear.addEventListener('click', () => {
+        formatSelected(character => { character.style = {}; });
+        color.focus();
+    });
+
+    editor.addEventListener('beforeinput', event => {
+        if (composing || event.isComposing) return;
+        const type = event.inputType;
+        if (type === 'insertParagraph' || type === 'insertLineBreak') {
+            event.preventDefault();
+            insertText('\n');
+        } else if (type === 'historyUndo' || type === 'historyRedo') {
+            event.preventDefault();
+            if (type === 'historyUndo') restoreHistory(history, redo);
+            else restoreHistory(redo, history);
+        } else {
+            edit = { selection: selectionInsideEditor() ?? selection, type };
+        }
+    });
+    editor.addEventListener('input', event => {
+        if (!composing && !event.isComposing) synchronizeInput();
+    });
+    editor.addEventListener('paste', event => {
+        event.preventDefault();
+        insertText(event.clipboardData.getData('text/plain'));
+    });
+    editor.addEventListener('compositionstart', () => {
+        composing = true;
+        edit = { selection: selectionInsideEditor() ?? selection, type: 'insertCompositionText' };
+    });
+    editor.addEventListener('compositionend', () => {
+        composing = false;
+        synchronizeInput();
+    });
+    editor.addEventListener('keydown', event => {
+        if (composing || !(event.ctrlKey || event.metaKey) || event.altKey) return;
+        const key = event.key.toLowerCase();
+        if (key !== 'z' && key !== 'y') return;
+        event.preventDefault();
+        if (key === 'y' || event.shiftKey) restoreHistory(redo, history);
+        else restoreHistory(history, redo);
+    });
+
+    textInput.form.addEventListener('input', event => {
+        if (!['MarqueeTextColor', 'MarqueeBackgroundColor', 'MarqueeBackgroundOpacity', 'MarqueeFontWeight', 'MarqueeFontSize'].includes(event.target.id)) return;
+        applyMarqueeAppearance(editor, readSettings());
+        updateToolbar();
     });
 }
