@@ -76,7 +76,11 @@ app.MapGet("/api/display", (WebAccessAlarmMonitor monitor, PlayerSettings player
             IconUrl = marker.IconFile is string file ? $"/engineering-media/{file}" : null
         },
         state.ConnectionStatus, state.LastSuccessAt,
-        Playlist = new { playlist.Revision, playlist.Items, playlist.IsMuted, playlist.Marquee, playlist.MarqueeAtTop }
+        Playlist = new
+        {
+            playlist.Revision, playlist.Items, playlist.IsMuted, playlist.Marquee,
+            playlist.MarqueeAtTop, playlist.MarqueeFontSize, playlist.MarqueeSpeed
+        }
     });
 });
 app.MapGet("/media/{file}", (string file, PlayerSettings player, HttpContext context) =>

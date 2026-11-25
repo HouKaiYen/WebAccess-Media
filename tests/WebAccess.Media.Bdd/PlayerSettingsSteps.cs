@@ -44,5 +44,33 @@ public sealed class PlayerSettingsSteps : IDisposable
     public void ThenOrderPersists() =>
         Assert.That(Open().Read().Items.Select(item => item.Name), Is.EqualTo(new[] { "B", "A" }));
 
+    [Given("舊版待機設定將公告顯示在上方")]
+    public void GivenLegacyMarquee() =>
+        File.WriteAllText(Path.Combine(_directory.FullName, "playlist.json"),
+            """{"Revision":0,"Items":[],"IsMuted":true,"Marquee":"公告","MarqueeAtTop":true}""");
+
+    [When("^管理員將跑馬燈改為下方、([0-9]+) 像素和 ([0-9]+) 像素每秒並儲存$")]
+    public void WhenMarqueeUpdated(int fontSize, int speed)
+    {
+        PlayerSettings storage = Open();
+        Assert.That(storage.Save(storage.Read() with
+        {
+            MarqueeAtTop = false, MarqueeFontSize = fontSize, MarqueeSpeed = speed
+        }), Is.True);
+    }
+
+    [Then("^重載後跑馬燈在(上|下)方，文字大小為 ([0-9]+) 像素，速度為 ([0-9]+) 像素每秒$")]
+    public void ThenMarqueePersists(string position, int fontSize, int speed)
+    {
+        Playlist playlist = Open().Read();
+        Assert.Multiple(() =>
+        {
+            Assert.That(playlist.Marquee, Is.EqualTo("公告"));
+            Assert.That(playlist.MarqueeAtTop, Is.EqualTo(position == "上"));
+            Assert.That(playlist.MarqueeFontSize, Is.EqualTo(fontSize));
+            Assert.That(playlist.MarqueeSpeed, Is.EqualTo(speed));
+        });
+    }
+
     public void Dispose() => _directory.Delete(recursive: true);
 }
