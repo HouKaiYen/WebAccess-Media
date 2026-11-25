@@ -388,7 +388,7 @@ mediaLibraryItems.addEventListener('click', async event => {
             playlistRevision.value = result.revision;
             entry.remove();
             document.getElementById('close-media-library').focus();
-            setMediaStatus(mediaLibraryStatus, mediaLibraryItems.children.length ? '已刪除本機檔案。' : '已刪除本機檔案。現有媒體清單已空。');
+            setMediaStatus(mediaLibraryStatus, result.message || (mediaLibraryItems.children.length ? '已刪除本機檔案。' : '已刪除本機檔案。現有媒體清單已空。'));
         });
     }
 });

@@ -72,13 +72,27 @@ internal sealed class WindowsStartupTasks(string executable, string storage, str
                 return false;
             }
         }
-        ApplyEnabledState(folder, background, tray, enabled);
+        List<(object Task, bool Enabled)> changes = GetLegacyDisableChanges((object)folder);
+        if (tray is not null) changes.Add((tray, enabled));
+        if (background is not null) changes.Add((background, enabled));
+        Stack<(object Task, bool Enabled)> applied = new();
+        try
+        {
+            ApplyEnabledState(changes, applied);
+        }
+        catch
+        {
+            RestoreEnabledState(applied);
+            throw;
+        }
         return true;
     }
 
-    public void Register(string account, string password)
+    public void Register(string account, string password) => Register((object)ConnectService(), account, password);
+
+    internal void Register(object scheduler, string account, string password)
     {
-        dynamic service = ConnectService();
+        dynamic service = scheduler;
         dynamic folder = service.GetFolder(@"\");
         dynamic logon = CreateDefinition(service, TaskTriggerLogon, TrayExecutable, TrayArguments);
         logon.Triggers.Item(1).UserId = userSid;
@@ -86,34 +100,64 @@ internal sealed class WindowsStartupTasks(string executable, string storage, str
         boot.Triggers.Item(1).Delay = "PT20S";
 
         string acl = $"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;{userSid})";
-        dynamic background = folder.RegisterTaskDefinition(BootTask, boot, TaskCreateOrUpdate, account, password,
-            TaskLogonPassword, acl);
-        dynamic tray = folder.RegisterTaskDefinition(TrayTask, logon, TaskCreateOrUpdate, userSid, null,
-            TaskLogonInteractiveToken, acl);
-        ApplyEnabledState(folder, background, tray, enabled: true);
-    }
-
-    private void ApplyEnabledState(dynamic folder, object? background, object? tray, bool enabled)
-    {
-        List<(object Task, bool Enabled)> changes = FindLegacyTasks((object)folder).Select(task => (Task: task, Enabled: false)).ToList();
-        if (tray is not null) changes.Add((tray, enabled));
-        if (background is not null) changes.Add((background, enabled));
-
+        dynamic? previousTray = FindTask(folder, TrayTask);
+        dynamic? previousDefinition = previousTray?.Definition;
+        string? previousAcl = previousTray is null ? null : (string)previousTray.GetSecurityDescriptor(4);
+        if (previousDefinition is not null) previousDefinition.Settings.Enabled = previousTray!.Enabled;
+        List<(object Task, bool Enabled)> changes = GetLegacyDisableChanges((object)folder);
         Stack<(object Task, bool Enabled)> applied = new();
+        bool trayRegistered = false;
         try
         {
-            foreach ((object task, bool desired) in changes)
-            {
-                bool previous = IsTaskEnabled(task);
-                if (previous == desired) continue;
-                ((dynamic)task).Enabled = desired;
-                applied.Push((task, previous));
-            }
+            folder.RegisterTaskDefinition(TrayTask, logon, TaskCreateOrUpdate, userSid, null,
+                TaskLogonInteractiveToken, acl);
+            trayRegistered = true;
+            ApplyEnabledState(changes, applied);
+            // 開機任務最後才更新，避免前面的任務註冊失敗時中斷原本的監控。
+            folder.RegisterTaskDefinition(BootTask, boot, TaskCreateOrUpdate, account, password,
+                TaskLogonPassword, acl);
         }
         catch
         {
-            foreach ((object task, bool previous) in applied) ((dynamic)task).Enabled = previous;
+            try
+            {
+                if (trayRegistered && previousDefinition is not null)
+                {
+                    folder.RegisterTaskDefinition(TrayTask, previousDefinition, TaskCreateOrUpdate, userSid, null,
+                        TaskLogonInteractiveToken, previousAcl);
+                }
+                else if (trayRegistered)
+                {
+                    folder.DeleteTask(TrayTask, 0);
+                }
+            }
+            finally
+            {
+                RestoreEnabledState(applied);
+            }
             throw;
+        }
+    }
+
+    private List<(object Task, bool Enabled)> GetLegacyDisableChanges(object folder) =>
+        FindLegacyTasks(folder).Select(task => (Task: task, Enabled: false)).ToList();
+
+    private static void ApplyEnabledState(List<(object Task, bool Enabled)> changes, Stack<(object Task, bool Enabled)> applied)
+    {
+        foreach ((object task, bool desired) in changes)
+        {
+            bool previous = IsTaskEnabled(task);
+            if (previous == desired) continue;
+            ((dynamic)task).Enabled = desired;
+            applied.Push((task, previous));
+        }
+    }
+
+    private static void RestoreEnabledState(Stack<(object Task, bool Enabled)> applied)
+    {
+        while (applied.TryPop(out (object Task, bool Enabled) change))
+        {
+            ((dynamic)change.Task).Enabled = change.Enabled;
         }
     }
 
@@ -172,7 +216,7 @@ internal sealed class WindowsStartupTasks(string executable, string storage, str
         definition.Settings.StopIfGoingOnBatteries = false;
         definition.Settings.StartWhenAvailable = true;
         definition.Settings.MultipleInstances = 2;
-        definition.Settings.Enabled = false;
+        definition.Settings.Enabled = true;
         definition.Principal.RunLevel = 0;
         definition.Triggers.Create(trigger);
         dynamic action = definition.Actions.Create(TaskActionExec);

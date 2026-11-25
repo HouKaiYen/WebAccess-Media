@@ -33,8 +33,22 @@ if (isWindowsBundle && Environment.UserInteractive && args.Length == 0)
 {
     builder.Configuration["Tray:Enabled"] ??= "true";
 }
-string settingsDirectory = builder.Configuration["Storage:Directory"] ?? PlayerSettings.DefaultDirectory;
-builder.Configuration["Storage:Directory"] = Path.GetFullPath(settingsDirectory);
+string settingsDirectory = Path.GetFullPath(builder.Configuration["Storage:Directory"] ?? PlayerSettings.DefaultDirectory);
+builder.Configuration["Storage:Directory"] = settingsDirectory;
+Directory.CreateDirectory(settingsDirectory);
+string leasePath = Path.Combine(settingsDirectory, ".service.lock");
+FileStream? lease = OpenServiceLease(leasePath);
+if (lease is null)
+{
+    string? address = ReadServiceAddress(leasePath);
+    Console.Error.WriteLine(string.IsNullOrWhiteSpace(address)
+        ? "已有 WebAccess Media 服務使用此資料夾。"
+        : $"已有 WebAccess Media 服務使用此資料夾，監聽網址為 {address}。");
+    Environment.ExitCode = 1;
+    return;
+}
+using FileStream serviceLease = lease;
+serviceLease.SetLength(0);
 IDataProtectionBuilder protection = builder.Services.AddDataProtection()
     .SetApplicationName("WebAccess-Media")
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(settingsDirectory, "keys")));
@@ -44,7 +58,7 @@ if (OperatingSystem.IsWindows())
 }
 
 builder.Services.AddRazorPages();
-builder.Services.AddSingleton(new PlayerSettings(Path.GetFullPath(settingsDirectory)));
+builder.Services.AddSingleton(new PlayerSettings(settingsDirectory));
 builder.Services.AddHttpClient("WebAccess", client => client.Timeout = TimeSpan.FromSeconds(5))
     .RemoveAllLoggers()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
@@ -58,6 +72,19 @@ builder.Services.AddSingleton<WebAccessAlarmMonitor>();
 builder.Services.AddHostedService(services => services.GetRequiredService<WebAccessAlarmMonitor>());
 
 WebApplication app = builder.Build();
+app.Services.GetRequiredService<PlayerSettings>().RecoverStandbyMediaDeletes(app.Logger);
+app.Lifetime.ApplicationStarted.Register(() =>
+{
+    try
+    {
+        serviceLease.Write(System.Text.Encoding.UTF8.GetBytes(string.Join(", ", app.Urls)));
+        serviceLease.Flush();
+    }
+    catch (IOException error)
+    {
+        app.Logger.LogWarning(error, "無法記錄目前的監聽網址。");
+    }
+});
 string? startupInstance = null;
 app.Use(async (context, next) =>
 {
@@ -154,3 +181,30 @@ if (OperatingSystem.IsWindows())
     }
 }
 app.Run();
+
+static FileStream? OpenServiceLease(string path)
+{
+    try
+    {
+        FileShare share = OperatingSystem.IsWindows() ? FileShare.Read : FileShare.None;
+        return new FileStream(path, FileMode.OpenOrCreate, FileAccess.Write, share);
+    }
+    catch (IOException error) when ((error.HResult & 0xffff) is 11 or 32 or 33)
+    {
+        return null;
+    }
+}
+
+static string? ReadServiceAddress(string path)
+{
+    try
+    {
+        using FileStream file = new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using StreamReader reader = new(file);
+        return reader.ReadLine();
+    }
+    catch (IOException)
+    {
+        return null;
+    }
+}

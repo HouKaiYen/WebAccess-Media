@@ -10,6 +10,8 @@ public sealed class PlayerSettingsSteps : IDisposable
 {
     private readonly DirectoryInfo _directory = Directory.CreateTempSubdirectory();
     private string? _address;
+    private int _oldPointRevision;
+    private string? _pointRemovalFeedback;
     private readonly string _standbyFile = $"{Guid.NewGuid():N}.png";
     private PlayerSettings Open() => new(_directory.FullName);
 
@@ -207,6 +209,48 @@ public sealed class PlayerSettingsSteps : IDisposable
         PlayerSettings storage = Open();
         Assert.That(storage.GetStandbyMedia(storage.Read()), Is.Empty);
         Assert.That(storage.FindMedia(_standbyFile), Is.Null);
+    }
+
+    [When("刪除現有媒體時 Windows 無法覆寫清單")]
+    public void WhenMediaDeleteCannotSave()
+    {
+        if (!OperatingSystem.IsWindows()) Assert.Ignore("這個情境使用 Windows 的檔案共用鎖。");
+        PlayerSettings storage = Open();
+        int revision = storage.Read().Revision;
+        using FileStream playlist = File.Open(Path.Combine(_directory.FullName, "playlist.json"),
+            FileMode.Open, FileAccess.Read, FileShare.Read);
+        Assert.That(() => storage.DeleteStandbyMedia(_standbyFile, revision),
+            Throws.InstanceOf<IOException>().Or.InstanceOf<UnauthorizedAccessException>());
+    }
+
+    [Given("另一個分頁已儲存測點")]
+    public void GivenPointUpdatedInAnotherTab()
+    {
+        PlayerSettings storage = Open();
+        Assert.That(storage.Save(storage.Read() with { PointPlans = [new PointPlan("A", "plan.png", 50, 50)] }), Is.True);
+        Playlist firstVersion = storage.Read();
+        _oldPointRevision = firstVersion.Revision;
+        Assert.That(storage.Save(firstVersion with { PointPlans = [firstVersion.PointPlans![0] with { X = 60 }] }), Is.True);
+    }
+
+    [When("工程師從舊的工程設定頁確認刪除")]
+    public void WhenPointRemovedFromOlderPage()
+    {
+        using HttpClient httpClient = new();
+        WebAccessClient client = new(httpClient);
+        EngineeringSettings connection = new(_directory.FullName,
+            new EphemeralDataProtectionProvider().CreateProtector("test"), client);
+        using WebAccessAlarmMonitor monitor = new(client, connection, new ConfigurationBuilder().Build());
+        PointsModel page = new(Open(), connection, client, monitor);
+        page.OnPostRemove("A", _oldPointRevision, "A");
+        _pointRemovalFeedback = page.Feedback;
+    }
+
+    [Then("測點仍保留且提示重新確認最新內容")]
+    public void ThenUpdatedPointIsPreserved()
+    {
+        Assert.That(Open().Read().PointPlans?.Single().X, Is.EqualTo(60));
+        Assert.That(_pointRemovalFeedback, Does.Contain("請確認最新內容"));
     }
 
     public void Dispose() => _directory.Delete(recursive: true);
