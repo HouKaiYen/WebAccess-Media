@@ -84,6 +84,7 @@ public sealed class PlayerSettingsSteps : IDisposable
             Assert.That(playlist.MarqueeBackgroundColor, Is.EqualTo("#101923"));
             Assert.That(playlist.MarqueeFontWeight, Is.EqualTo(400));
             Assert.That(playlist.MarqueeBackgroundOpacity, Is.EqualTo(91));
+            Assert.That(playlist.MarqueeCharacterStyles, Is.Empty);
         });
     }
 
@@ -111,6 +112,28 @@ public sealed class PlayerSettingsSteps : IDisposable
             Assert.That(playlist.MarqueeFontWeight, Is.EqualTo(700));
             Assert.That(playlist.MarqueeBackgroundOpacity, Is.EqualTo(65));
         });
+    }
+
+    [When("管理員儲存含漢字和組合表情符號的公告逐字樣式")]
+    public void WhenCharacterStylesSaved()
+    {
+        PlayerSettings storage = Open();
+        Assert.That(storage.Save(storage.Read() with
+        {
+            Marquee = "好👩‍💻日",
+            MarqueeCharacterStyles = [new(0, 1, "#ff4422", null, 700), new(1, 5, null, 44, null)]
+        }), Is.True);
+    }
+
+    [Then("重載後兩個字元各自套用原本的樣式")]
+    public void ThenCharacterStylesRemainSeparate()
+    {
+        Playlist playlist = Open().Read();
+        Assert.That(playlist.MarqueeCharacterStyles, Is.EqualTo(new MarqueeCharacterStyle[]
+        {
+            new(0, 1, "#ff4422", null, 700), new(1, 5, null, 44, null)
+        }));
+        Assert.That(playlist.Marquee.Substring(1, 5), Is.EqualTo("👩‍💻"));
     }
 
     [Given("舊版播放清單引用一張已上傳的圖片")]

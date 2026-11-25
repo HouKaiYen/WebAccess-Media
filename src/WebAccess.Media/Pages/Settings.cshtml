@@ -39,6 +39,18 @@
         .marquee-appearance { margin-top: .95rem; border-top: 1px solid var(--line); }
         .marquee-appearance summary { padding: .65rem 0; font-weight: 600; cursor: pointer; }
         .marquee-appearance summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .character-editor { margin-top: .8rem; padding-top: .8rem; border-top: 1px solid var(--line); }
+        .character-editor h3 { margin: 0 0 .35rem; font-size: .95rem; }
+        .character-editor p { margin: 0 0 .55rem; }
+        .character-list { display: flex; flex-wrap: wrap; gap: .35rem; max-height: 10rem; overflow: auto; padding: .25rem; margin: .55rem 0; }
+        .character-list button { min-width: 2.25rem; min-height: 2.25rem; padding: .2rem .4rem; }
+        .character-list button[data-styled] { text-decoration: underline; text-underline-offset: .2em; }
+        .character-list button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+        .character-color { display: flex; gap: .35rem; }
+        .character-color input { min-width: 0; }
+        .character-color button { flex: none; }
+        .character-sample { overflow: auto; max-height: 9rem; border-radius: .4rem; background: #101923; }
+        .character-sample > div { padding: .35rem .5rem; overflow-wrap: anywhere; white-space: pre-wrap; }
         .switch input { appearance: none; width: 2.1rem; height: 1.16rem; padding: 0; border: 0; border-radius: 2rem; background: #cdd6e5; cursor: pointer; }
         .switch input::before { display: block; width: .83rem; height: .83rem; margin: .165rem; border-radius: 50%; background: #fff; content: ""; }
         .switch input:checked { background: var(--accent); }
@@ -57,7 +69,7 @@
         .preview img, .preview video { max-width: 100%; max-height: 100%; }
         #preview-media { display: grid; place-items: center; width: 100%; height: 100%; overflow: hidden; }
         @@media (max-width: 640px) { .options { grid-template-columns: 1fr; } header { position: static; } }
-        @@media (max-width: 420px) { .marquee-fields { grid-template-columns: 1fr; } }
+        @@media (max-width: 420px) { .marquee-fields { grid-template-columns: 1fr; } .character-list button { min-width: 2.75rem; min-height: 2.75rem; } }
 
         main { max-width: 1100px; margin: auto; padding: 1.25rem; }
 </style>
@@ -153,6 +165,40 @@
                         <small id="marquee-opacity-help">0% 為透明。</small>
                     </div>
                 </div>
+                <div id="marquee-character-editor" class="character-editor">
+                    <h3>逐字樣式</h3>
+                    <p id="marquee-character-hint" class="muted">選取一個字，就能單獨調整它的顏色、大小與字重。</p>
+                    <div id="marquee-character-list" class="character-list" role="group" aria-label="選擇要調整的字" hidden></div>
+                    <div id="marquee-character-controls" hidden>
+                        <p id="marquee-selected-character" role="status"></p>
+                        <div class="marquee-fields">
+                            <div class="marquee-field">
+                                <label for="marquee-character-color">這個字的顏色</label>
+                                <div class="character-color">
+                                    <input id="marquee-character-color" type="color">
+                                    <button type="button" id="reset-marquee-character-color">沿用全文</button>
+                                </div>
+                            </div>
+                            <div class="marquee-field">
+                                <label for="marquee-character-size">這個字的大小（像素）</label>
+                                <input id="marquee-character-size" type="number" min="@WebAccess.Media.Playlist.MinMarqueeFontSize"
+                                       max="@WebAccess.Media.Playlist.MaxMarqueeFontSize" placeholder="沿用全文">
+                            </div>
+                            <div class="marquee-field">
+                                <label for="marquee-character-weight">這個字的字重</label>
+                                <select id="marquee-character-weight">
+                                    <option value="">沿用全文</option>
+                                    <option value="400">一般</option>
+                                    <option value="600">半粗體</option>
+                                    <option value="700">粗體</option>
+                                </select>
+                            </div>
+                        </div>
+                        <p class="muted">有底線的字已設定逐字樣式。</p>
+                        <div class="character-sample" aria-label="公告外觀預覽"><div id="marquee-character-sample"></div></div>
+                    </div>
+                    <input asp-for="MarqueeCharacterStyles" type="hidden">
+                </div>
             </details>
         </section></div>
     </form>
@@ -179,6 +225,7 @@
     <div class="preview"><div id="preview-media"></div><div class="marquee" id="preview-marquee" hidden><span></span></div></div>
 </dialog>
 <script src="/marquee.js"></script>
+<script src="/marquee-character-editor.js"></script>
 <script>
 const playlistForm = document.getElementById('playlist-form');
 const list = document.getElementById('playlist');
@@ -378,6 +425,21 @@ function marqueeValue(id) {
     const field = document.getElementById(id);
     return field.validity.valid ? field.valueAsNumber : Number(field.dataset.default);
 }
+function readMarqueeSettings() {
+    return {
+        marquee: normalizeMarqueeText(document.getElementById('Marquee').value),
+        marqueeEnabled: document.getElementById('MarqueeEnabled').checked,
+        marqueeAtTop: document.getElementById('MarqueeAtTop').value === 'True',
+        marqueeFontSize: marqueeValue('MarqueeFontSize'),
+        marqueeSpeed: marqueeValue('MarqueeSpeed'),
+        marqueeTextColor: document.getElementById('MarqueeTextColor').value,
+        marqueeBackgroundColor: document.getElementById('MarqueeBackgroundColor').value,
+        marqueeBackgroundOpacity: marqueeValue('MarqueeBackgroundOpacity'),
+        marqueeFontWeight: Number(document.getElementById('MarqueeFontWeight').value),
+        marqueeCharacterStyles: JSON.parse(document.getElementById('MarqueeCharacterStyles').value || '[]')
+    };
+}
+setupMarqueeCharacterEditor(document.getElementById('Marquee'), readMarqueeSettings, markDirty);
 let timeout;
 document.getElementById('open-preview').addEventListener('click', () => {
     const rows = [...list.querySelectorAll('.row:not([hidden])')];
@@ -405,17 +467,7 @@ document.getElementById('open-preview').addEventListener('click', () => {
         }
     }
     dialog.showModal();
-    renderPreviewMarquee({
-        marquee: document.getElementById('Marquee').value.trim(),
-        marqueeEnabled: document.getElementById('MarqueeEnabled').checked,
-        marqueeAtTop: document.getElementById('MarqueeAtTop').value === 'True',
-        marqueeFontSize: marqueeValue('MarqueeFontSize'),
-        marqueeSpeed: marqueeValue('MarqueeSpeed'),
-        marqueeTextColor: document.getElementById('MarqueeTextColor').value,
-        marqueeBackgroundColor: document.getElementById('MarqueeBackgroundColor').value,
-        marqueeBackgroundOpacity: marqueeValue('MarqueeBackgroundOpacity'),
-        marqueeFontWeight: Number(document.getElementById('MarqueeFontWeight').value)
-    });
+    renderPreviewMarquee(readMarqueeSettings());
     if (rows.length) play(0);
     else stage.textContent = '播放清單目前是空的';
 });

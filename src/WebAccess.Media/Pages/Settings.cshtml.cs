@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
@@ -18,6 +20,7 @@ public sealed class SettingsModel(PlayerSettings storage) : PageModel
     [BindProperty, RegularExpression(HexColor)] public string? MarqueeBackgroundColor { get; set; }
     [BindProperty, Range(0, 100)] public int? MarqueeBackgroundOpacity { get; set; }
     [BindProperty] public int? MarqueeFontWeight { get; set; }
+    [BindProperty] public string? MarqueeCharacterStyles { get; set; }
     [BindProperty, Range(Playlist.MinMarqueeFontSize, Playlist.MaxMarqueeFontSize)]
     public int? MarqueeFontSize { get; set; }
     [BindProperty, Range(Playlist.MinMarqueeSpeed, Playlist.MaxMarqueeSpeed)]
@@ -37,6 +40,7 @@ public sealed class SettingsModel(PlayerSettings storage) : PageModel
         MarqueeBackgroundColor = playlist.MarqueeBackgroundColor;
         MarqueeBackgroundOpacity = playlist.MarqueeBackgroundOpacity;
         MarqueeFontWeight = playlist.MarqueeFontWeight;
+        MarqueeCharacterStyles = JsonSerializer.Serialize(playlist.MarqueeCharacterStyles, JsonSerializerOptions.Web);
         MarqueeFontSize = playlist.MarqueeFontSize;
         MarqueeSpeed = playlist.MarqueeSpeed;
         Items = playlist.Items.Select(ItemInput.FromPlaylistItem).ToList();
@@ -161,6 +165,7 @@ public sealed class SettingsModel(PlayerSettings storage) : PageModel
     public IActionResult OnPostSave(string[]? remove)
     {
         Playlist playlist = storage.Read();
+        string marquee = (Marquee ?? "").Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n').Trim();
         HashSet<string> knownFiles = playlist.Items.Select(item => item.File).ToHashSet(StringComparer.Ordinal);
         HashSet<string> removed = (remove ?? []).ToHashSet(StringComparer.Ordinal);
         HashSet<string> submittedFiles = Items.Select(item => item.File).ToHashSet(StringComparer.Ordinal);
@@ -185,16 +190,20 @@ public sealed class SettingsModel(PlayerSettings storage) : PageModel
         {
             Feedback = "跑馬燈背景不透明度須介於 0% 和 100%。";
         }
-        else if (MarqueeFontWeight is not (null or 400 or 600 or 700) ||
+        else if (!IsMarqueeWeight(MarqueeFontWeight) ||
             ModelState[nameof(MarqueeFontWeight)]?.Errors.Count > 0)
         {
             Feedback = "請選擇有效的跑馬燈字重。";
         }
-        else if (!ModelState.IsValid || (Marquee?.Length ?? 0) > 500 || Items.Count != submittedFiles.Count ||
+        else if (!ModelState.IsValid || marquee.Length > 500 || Items.Count != submittedFiles.Count ||
             !knownFiles.SetEquals(submittedFiles.Concat(removed)) || Items.Any(item => !removed.Contains(item.File) &&
                 (string.IsNullOrWhiteSpace(item.Name) || item.Name.Length > 200 || item.Seconds is < 3 or > 300)))
         {
             Feedback = "播放清單資料無效。請確認名稱、停留秒數及跑馬燈長度。";
+        }
+        else if (!TryReadCharacterStyles(playlist, marquee, out MarqueeCharacterStyle[] characterStyles))
+        {
+            Feedback = "無法儲存跑馬燈的逐字樣式，請確認字元、顏色和大小後再試。";
         }
         else
         {
@@ -202,14 +211,15 @@ public sealed class SettingsModel(PlayerSettings storage) : PageModel
                 .Select(item => new PlaylistItem(item.File, item.Name.Trim(), item.Seconds)).ToArray();
             if (!storage.Save(playlist with
             {
-                Items = items, IsMuted = IsMuted, Marquee = Marquee?.Trim() ?? "", MarqueeAtTop = MarqueeAtTop,
+                Items = items, IsMuted = IsMuted, Marquee = marquee, MarqueeAtTop = MarqueeAtTop,
                 MarqueeFontSize = MarqueeFontSize ?? playlist.MarqueeFontSize,
                 MarqueeSpeed = MarqueeSpeed ?? playlist.MarqueeSpeed,
                 MarqueeEnabled = MarqueeEnabled ?? playlist.MarqueeEnabled,
                 MarqueeTextColor = MarqueeTextColor?.ToLowerInvariant() ?? playlist.MarqueeTextColor,
                 MarqueeBackgroundColor = MarqueeBackgroundColor?.ToLowerInvariant() ?? playlist.MarqueeBackgroundColor,
                 MarqueeBackgroundOpacity = MarqueeBackgroundOpacity ?? playlist.MarqueeBackgroundOpacity,
-                MarqueeFontWeight = MarqueeFontWeight ?? playlist.MarqueeFontWeight
+                MarqueeFontWeight = MarqueeFontWeight ?? playlist.MarqueeFontWeight,
+                MarqueeCharacterStyles = characterStyles
             }))
             {
                 Feedback = "設定已更新，請檢查最新清單再編輯。";
@@ -219,6 +229,48 @@ public sealed class SettingsModel(PlayerSettings storage) : PageModel
             Feedback = "已儲存待機設定。";
         }
         return RedirectToPage();
+    }
+
+    private static bool IsMarqueeWeight(int? value) => value is null or 400 or 600 or 700;
+
+    private bool TryReadCharacterStyles(Playlist playlist, string text, out MarqueeCharacterStyle[] styles)
+    {
+        styles = [];
+        if (MarqueeCharacterStyles is null)
+        {
+            styles = text == playlist.Marquee ? playlist.MarqueeCharacterStyles : [];
+            return true;
+        }
+        if (MarqueeCharacterStyles.Length > 100_000) return false;
+
+        try
+        {
+            MarqueeCharacterStyle[]? submitted = JsonSerializer.Deserialize<MarqueeCharacterStyle[]>(
+                MarqueeCharacterStyles, JsonSerializerOptions.Web);
+            if (submitted is null || submitted.Length > text.Length) return false;
+            int[] boundaries = StringInfo.ParseCombiningCharacters(text);
+            int previousEnd = 0;
+            foreach (MarqueeCharacterStyle style in submitted)
+            {
+                if (style is null || style.Start < previousEnd || !IsMarqueeWeight(style.FontWeight) ||
+                    style.FontSize is < Playlist.MinMarqueeFontSize or > Playlist.MaxMarqueeFontSize ||
+                    (style.TextColor is not null && !Regex.IsMatch(style.TextColor, HexColor)))
+                {
+                    return false;
+                }
+                int index = Array.BinarySearch(boundaries, style.Start);
+                if (index < 0) return false;
+                int end = index + 1 < boundaries.Length ? boundaries[index + 1] : text.Length;
+                if (style.Length != end - style.Start) return false;
+                previousEnd = end;
+            }
+            styles = submitted;
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     public sealed class ItemInput

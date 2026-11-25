@@ -29,6 +29,7 @@ public sealed record PointPlan(string Point, string File, int X, int Y,
 }
 public sealed record FloorImage(string File, string Name);
 public sealed record StandbyMedia(string File, string Name);
+public sealed record MarqueeCharacterStyle(int Start, int Length, string? TextColor, int? FontSize, int? FontWeight);
 
 public sealed record Playlist(int Revision, PlaylistItem[] Items, bool IsMuted, string Marquee, bool MarqueeAtTop,
     PointPlan[]? PointPlans = null, FloorImage[]? FloorImages = null,
@@ -40,6 +41,7 @@ public sealed record Playlist(int Revision, PlaylistItem[] Items, bool IsMuted, 
     public string MarqueeBackgroundColor { get; init; } = "#101923";
     public int MarqueeBackgroundOpacity { get; init; } = DefaultMarqueeBackgroundOpacity;
     public int MarqueeFontWeight { get; init; } = DefaultMarqueeFontWeight;
+    public MarqueeCharacterStyle[] MarqueeCharacterStyles { get; init; } = [];
     public const int DefaultMarqueeBackgroundOpacity = 91;
     public const int DefaultMarqueeFontWeight = 400;
     public const int DefaultMarqueeFontSize = 30;
