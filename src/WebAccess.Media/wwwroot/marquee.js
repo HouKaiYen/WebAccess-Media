@@ -29,7 +29,7 @@ function renderMarqueeText(element, text, styles) {
     element.replaceChildren(content);
 }
 
-function createMarqueeRenderer(ticker) {
+function createMarqueeRenderer(ticker, layout) {
     const track = ticker.firstElementChild;
     let speed;
     function updateDuration() {
@@ -40,14 +40,23 @@ function createMarqueeRenderer(ticker) {
         }
     }
     new ResizeObserver(updateDuration).observe(track, { box: 'border-box' });
+    function updateLayout() {
+        const height = ticker.offsetHeight;
+        const atTop = ticker.classList.contains('top');
+        layout.style.setProperty('--marquee-top-height', (atTop ? height : 0) + 'px');
+        layout.style.setProperty('--marquee-bottom-height', (atTop ? 0 : height) + 'px');
+    }
+    new ResizeObserver(updateLayout).observe(ticker);
 
     return function renderMarquee(settings) {
         ticker.hidden = !settings?.marquee || settings.marqueeEnabled === false;
-        if (ticker.hidden) return;
-        renderMarqueeText(track, settings.marquee, settings.marqueeCharacterStyles);
-        ticker.classList.toggle('top', settings.marqueeAtTop);
-        applyMarqueeAppearance(ticker, settings);
-        speed = settings.marqueeSpeed;
-        updateDuration();
+        if (!ticker.hidden) {
+            renderMarqueeText(track, settings.marquee, settings.marqueeCharacterStyles);
+            ticker.classList.toggle('top', settings.marqueeAtTop);
+            applyMarqueeAppearance(ticker, settings);
+            speed = settings.marqueeSpeed;
+            updateDuration();
+        }
+        updateLayout();
     };
 }
