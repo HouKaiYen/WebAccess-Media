@@ -111,6 +111,8 @@ BDD 規格位於 `tests/WebAccess.Media.Bdd`，使用繁體中文 Gherkin、Reqn
 
 推送標籤後，Windows CI 通過才會建立 GitHub Release 草稿，附上 `WebAccess-Media-win-x64.zip` 並以標籤訊息作為版本說明。確認草稿後即可從 GitHub Releases 發布。
 
+若標籤已推送但草稿建立失敗，可從 GitHub Actions 的 Windows CI 選擇「Run workflow」，在 master 上輸入原版本標籤重新建置。重跑會使用該標籤對應的原始碼。
+
 ## 目前版本範圍
 
 支援工程連線、WebAccess 測點選取、共用平面圖與拖曳定位、告警圖示、待機輪播及跑馬燈。同時有多個已新增測點告警時，依 API 清單順序顯示第一個。PDF 輪播、待機共用媒體庫、系統匣、開機自啟與 MSI 安裝屬後續版本。

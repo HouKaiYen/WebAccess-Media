@@ -5,13 +5,29 @@ on:
     tags: ['v[0-9]+.[0-9]+.[0-9]+']
   pull_request:
     branches: [develop, master]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 要重新建置的正式版本標籤
+        required: true
+        type: string
 permissions:
   contents: read
 jobs:
   verify:
     runs-on: windows-latest
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || '' }}
+      - name: 記錄建置提交
+        id: source
+        run: |
+          $commit = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "commit=$commit" >> $env:GITHUB_OUTPUT
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
@@ -24,25 +40,32 @@ jobs:
           path: artifacts/win-x64
           if-no-files-found: error
   draft-release:
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     needs: verify
     runs-on: windows-latest
     permissions:
       contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+      VERIFIED_COMMIT: ${{ needs.verify.outputs.commit }}
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || '' }}
           fetch-depth: 0
           persist-credentials: false
       - name: 驗證正式版本標籤
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if ($env:RELEASE_TAG -cnotmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') {
+            throw '發布標籤格式必須是 vX.Y.Z。'
+          }
           git merge-base --is-ancestor HEAD refs/remotes/origin/master
           if ($LASTEXITCODE -ne 0) {
             throw '正式版本標籤必須指向已合併至 master 的提交。'
           }
-          $tagRef = gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/$env:GITHUB_REF_NAME" --jq '.object'
+          $tagRef = gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/$env:RELEASE_TAG" --jq '.object'
           if ($LASTEXITCODE -ne 0) {
             throw '無法讀取 GitHub 上的版本標籤。'
           }
@@ -50,10 +73,14 @@ jobs:
           if ($tag.type -ne 'tag') {
             throw '請使用附有簡短版本說明的 annotated tag。'
           }
-          $tagTarget = gh api "repos/$env:GITHUB_REPOSITORY/git/tags/$($tag.sha)" --jq '.object.sha'
-          if ($LASTEXITCODE -ne 0 -or $tagTarget -ne (git rev-parse HEAD)) {
+          $tagDetails = gh api "repos/$env:GITHUB_REPOSITORY/git/tags/$($tag.sha)"
+          if ($LASTEXITCODE -ne 0) { throw '無法讀取版本標籤內容。' }
+          $version = $tagDetails | ConvertFrom-Json
+          if ($version.object.sha -ne $env:VERIFIED_COMMIT -or $version.object.sha -ne (git rev-parse HEAD)) {
             throw 'GitHub 上的版本標籤與本次建置的提交不符。'
           }
+          if ([string]::IsNullOrWhiteSpace($version.message)) { throw '版本標籤缺少發布說明。' }
+          $version.message | Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'release-notes.md') -Encoding utf8
       - uses: actions/download-artifact@v4
         with:
           name: WebAccess-Media-win-x64
@@ -64,4 +91,16 @@ jobs:
         run: |
           $package = 'artifacts/WebAccess-Media-win-x64.zip'
           Compress-Archive -Path 'artifacts/win-x64/*' -DestinationPath $package
-          gh release create "$env:GITHUB_REF_NAME" "$package" --repo "$env:GITHUB_REPOSITORY" --verify-tag --draft --notes-from-tag
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $package).Path)
+          try {
+            $entries = $archive.Entries.FullName -replace '\\', '/'
+            foreach ($file in @('WebAccess.Media.exe', 'tray/WebAccess.Media.Tray.exe', 'Start-WebAccess-Media.cmd', 'server-settings.json')) {
+              if ($entries -notcontains $file) { throw "ZIP 缺少 $file。" }
+            }
+          } finally {
+            $archive.Dispose()
+          }
+          Get-FileHash -LiteralPath $package -Algorithm SHA256
+          $notes = Join-Path $env:RUNNER_TEMP 'release-notes.md'
+          gh release create "$env:RELEASE_TAG" "$package" --repo "$env:GITHUB_REPOSITORY" --verify-tag --draft --notes-file $notes
