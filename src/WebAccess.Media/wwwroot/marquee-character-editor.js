@@ -22,12 +22,6 @@ function setupMarqueeCharacterEditor(textInput, readSettings, markDirty) {
     const size = document.getElementById('marquee-range-size');
     const weight = document.getElementById('marquee-range-weight');
     const reset = document.getElementById('reset-marquee-range');
-    const inheritStyle = document.getElementById('inherit-marquee-range');
-    const defaultStyle = {
-        textColor: reset.dataset.defaultColor,
-        fontSize: Number(reset.dataset.defaultSize),
-        fontWeight: Number(reset.dataset.defaultWeight)
-    };
     const segmenter = new Intl.Segmenter('zh-Hant', { granularity: 'grapheme' });
     const history = [];
     const redo = [];
@@ -129,9 +123,7 @@ function setupMarqueeCharacterEditor(textInput, readSettings, markDirty) {
             if (document.activeElement !== size) size.value = selectedSize ?? '';
             size.placeholder = selectedSize === null ? '混合' : '沿用全文';
             weight.value = selectedWeight === null ? 'mixed' : selectedWeight ?? '';
-            inheritStyle.disabled = !selected.some(({ style }) => Object.keys(style).length);
-            reset.disabled = selected.every(({ style }) => style.textColor === defaultStyle.textColor &&
-                style.fontSize === defaultStyle.fontSize && style.fontWeight === defaultStyle.fontWeight);
+            reset.disabled = !selected.some(({ style }) => Object.keys(style).length);
         }
         const highlights = globalThis.CSS?.highlights;
         if (highlights && typeof Highlight === 'function') {
@@ -282,12 +274,8 @@ function setupMarqueeCharacterEditor(textInput, readSettings, markDirty) {
         if (size.validity.valid) setFormat('fontSize', size.value ? size.valueAsNumber : null);
     });
     weight.addEventListener('change', () => setFormat('fontWeight', weight.value ? Number(weight.value) : null));
-    inheritStyle.addEventListener('click', () => {
-        formatSelected(character => { character.style = {}; });
-        color.focus();
-    });
     reset.addEventListener('click', () => {
-        formatSelected(character => { character.style = { ...defaultStyle }; });
+        formatSelected(character => { character.style = {}; });
         color.focus();
     });
 

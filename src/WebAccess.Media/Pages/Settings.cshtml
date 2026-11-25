@@ -161,14 +161,10 @@
                         </select>
                     </label>
                     <div class="marquee-range-actions">
-                        <button type="button" id="inherit-marquee-range">沿用全文</button>
-                        <button type="button" id="reset-marquee-range"
-                                data-default-color="@WebAccess.Media.Playlist.DefaultMarqueeTextColor"
-                                data-default-size="@WebAccess.Media.Playlist.DefaultMarqueeFontSize"
-                                data-default-weight="@WebAccess.Media.Playlist.DefaultMarqueeFontWeight">還原系統預設</button>
+                        <button type="button" id="reset-marquee-range">清除格式</button>
                     </div>
                 </fieldset>
-                <small id="marquee-range-help" class="marquee-range-help">沿用全文會跟隨下方的全文預設。系統預設為白色、@WebAccess.Media.Playlist.DefaultMarqueeFontSize 像素、一般字重。</small>
+                <small id="marquee-range-help" class="marquee-range-help">清除格式後，選取的文字會跟隨下方的全文預設。</small>
             </div>
             <input asp-for="MarqueeCharacterStyles" type="hidden">
             <div class="marquee-fields">
@@ -189,7 +185,7 @@
             <details class="marquee-appearance">
                 <summary>全文與背景樣式</summary>
                 <h3>全文預設</h3>
-                <p class="muted">沒有個別設定的文字會沿用這組樣式。</p>
+                <p class="muted">沒有個別設定的文字會沿用這組樣式。初始設定為白色、@WebAccess.Media.Playlist.DefaultMarqueeFontSize 像素。</p>
                 <div class="marquee-fields">
                     <div class="marquee-field">
                         <label asp-for="MarqueeTextColor">文字顏色</label>
