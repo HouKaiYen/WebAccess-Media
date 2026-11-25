@@ -7,6 +7,7 @@ public sealed class PlayerSettingsSteps : IDisposable
 {
     private readonly DirectoryInfo _directory = Directory.CreateTempSubdirectory();
     private string? _address;
+    private readonly string _standbyFile = $"{Guid.NewGuid():N}.png";
     private PlayerSettings Open() => new(_directory.FullName);
 
     [Given("工程師輸入 IP「(.*)」")]
@@ -70,6 +71,58 @@ public sealed class PlayerSettingsSteps : IDisposable
             Assert.That(playlist.MarqueeFontSize, Is.EqualTo(fontSize));
             Assert.That(playlist.MarqueeSpeed, Is.EqualTo(speed));
         });
+    }
+
+    [Given("舊版播放清單引用一張已上傳的圖片")]
+    public void GivenLegacyMedia()
+    {
+        string mediaDirectory = Path.Combine(_directory.FullName, "media");
+        Directory.CreateDirectory(mediaDirectory);
+        File.WriteAllText(Path.Combine(mediaDirectory, _standbyFile), "test");
+        File.WriteAllText(Path.Combine(_directory.FullName, "playlist.json"),
+            $$"""{"Revision":0,"Items":[{"File":"{{_standbyFile}}","Name":"首頁","Seconds":10}],"IsMuted":true,"Marquee":"","MarqueeAtTop":false}""");
+    }
+
+    [When("管理員從播放清單移除圖片並儲存")]
+    public void WhenPlaylistItemRemoved()
+    {
+        PlayerSettings storage = Open();
+        Assert.That(storage.Save(storage.Read() with { Items = [] }), Is.True);
+    }
+
+    [Then("現有媒體仍包含可讀取的圖片")]
+    public void ThenMediaRemains()
+    {
+        PlayerSettings storage = Open();
+        Playlist playlist = storage.Read();
+        Assert.That(playlist.Items, Is.Empty);
+        Assert.That(storage.GetStandbyMedia(playlist), Is.EqualTo(new[] { new StandbyMedia(_standbyFile, "首頁") }));
+        Assert.That(storage.FindMedia(_standbyFile), Is.Not.Null);
+    }
+
+    [Then("仍在播放清單中的圖片不能從現有媒體刪除")]
+    public void ThenMediaInUseCannotBeDeleted()
+    {
+        PlayerSettings storage = Open();
+        Assert.That(storage.DeleteStandbyMedia(_standbyFile, storage.Read().Revision), Is.EqualTo(StandbyMediaDeletion.InUse));
+        Assert.That(storage.FindMedia(_standbyFile), Is.Not.Null);
+    }
+
+    [When("管理員從現有媒體刪除圖片")]
+    public void WhenMediaDeleted()
+    {
+        PlayerSettings storage = Open();
+        Playlist playlist = storage.Read();
+        Assert.That(storage.DeleteStandbyMedia(_standbyFile, playlist.Revision - 1), Is.EqualTo(StandbyMediaDeletion.Stale));
+        Assert.That(storage.DeleteStandbyMedia(_standbyFile, playlist.Revision), Is.EqualTo(StandbyMediaDeletion.Deleted));
+    }
+
+    [Then("圖片及其本機副本已刪除")]
+    public void ThenMediaAndLocalCopyAreGone()
+    {
+        PlayerSettings storage = Open();
+        Assert.That(storage.GetStandbyMedia(storage.Read()), Is.Empty);
+        Assert.That(storage.FindMedia(_standbyFile), Is.Null);
     }
 
     public void Dispose() => _directory.Delete(recursive: true);

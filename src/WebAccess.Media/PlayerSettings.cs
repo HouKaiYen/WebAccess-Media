@@ -21,10 +21,12 @@ public sealed record PointPlan(string Point, string File, int X, int Y,
     public const int MaxIconSize = 160;
 }
 public sealed record FloorImage(string File, string Name);
+public sealed record StandbyMedia(string File, string Name);
 
 public sealed record Playlist(int Revision, PlaylistItem[] Items, bool IsMuted, string Marquee, bool MarqueeAtTop,
     PointPlan[]? PointPlans = null, FloorImage[]? FloorImages = null,
-    int MarqueeFontSize = Playlist.DefaultMarqueeFontSize, int MarqueeSpeed = Playlist.DefaultMarqueeSpeed)
+    int MarqueeFontSize = Playlist.DefaultMarqueeFontSize, int MarqueeSpeed = Playlist.DefaultMarqueeSpeed,
+    StandbyMedia[]? MediaLibrary = null)
 {
     public const int DefaultMarqueeFontSize = 30;
     public const int MinMarqueeFontSize = 12;
@@ -45,9 +47,12 @@ public sealed class PlayerSettings(string directory)
     {
         lock (_gate)
         {
-            return File.Exists(_path)
+            Playlist playlist = File.Exists(_path)
                 ? JsonSerializer.Deserialize<Playlist>(File.ReadAllText(_path)) ?? throw new InvalidDataException()
                 : new Playlist(0, [], true, "", false);
+            return playlist.MediaLibrary is null
+                ? playlist with { MediaLibrary = playlist.Items.Select(item => new StandbyMedia(item.File, item.Name)).ToArray() }
+                : playlist;
         }
     }
 
@@ -140,19 +145,54 @@ public sealed class PlayerSettings(string directory)
         (playlist.PointPlans?.Any(plan => string.Equals(plan.File, file, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(plan.IconFile, file, StringComparison.OrdinalIgnoreCase)) ?? false);
 
+    public StandbyMedia[] GetStandbyMedia(Playlist playlist) =>
+        (playlist.MediaLibrary ?? []).Where(media => !IsEngineeringReference(playlist, media.File) ||
+            IsInPlaylist(playlist, media.File)).ToArray();
+
+    public StandbyMediaDeletion DeleteStandbyMedia(string? file, int revision)
+    {
+        lock (_gate)
+        {
+            Playlist playlist = Read();
+            if (playlist.Revision != revision)
+            {
+                return StandbyMediaDeletion.Stale;
+            }
+
+            StandbyMedia? media = GetStandbyMedia(playlist).FirstOrDefault(item => item.File == file);
+            if (media is null)
+            {
+                return StandbyMediaDeletion.NotFound;
+            }
+            if (IsInPlaylist(playlist, media.File) || IsEngineeringReference(playlist, media.File))
+            {
+                return StandbyMediaDeletion.InUse;
+            }
+
+            RemoveMedia(media.File);
+            StandbyMedia[] remaining = (playlist.MediaLibrary ?? []).Where(item => item.File != media.File).ToArray();
+            return Save(playlist with { MediaLibrary = remaining }) ? StandbyMediaDeletion.Deleted : StandbyMediaDeletion.Stale;
+        }
+    }
+
+    private static bool IsInPlaylist(Playlist playlist, string file) =>
+        playlist.Items.Any(item => string.Equals(item.File, file, StringComparison.OrdinalIgnoreCase));
+
     public void RemoveUnusedMedia(string file, bool isEngineeringMedia = false)
     {
         lock (_gate)
         {
             Playlist playlist = Read();
-            if (IsEngineeringReference(playlist, file) ||
-                playlist.Items.Any(item => string.Equals(item.File, file, StringComparison.OrdinalIgnoreCase)))
+            if (IsEngineeringReference(playlist, file) || IsInPlaylist(playlist, file))
             {
                 return;
             }
 
             string? path = isEngineeringMedia ? FindMedia(_engineeringDirectory, file) : null;
-            path ??= FindMedia(_mediaDirectory, file);
+            if (path is null && !(playlist.MediaLibrary?.Any(media => string.Equals(media.File, file, StringComparison.OrdinalIgnoreCase)) ?? false))
+            {
+                path = FindMedia(_mediaDirectory, file);
+            }
             if (path is not null)
             {
                 File.Delete(path);
@@ -196,4 +236,12 @@ public sealed class PlayerSettings(string directory)
         ".mp4" => "video/mp4",
         _ => null
     };
+}
+
+public enum StandbyMediaDeletion
+{
+    Deleted,
+    Stale,
+    NotFound,
+    InUse
 }
