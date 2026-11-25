@@ -58,6 +58,34 @@ public sealed class AlarmAppearanceSteps : IDisposable
         Assert.That(marker?.AlarmVolume, Is.EqualTo(45));
     }
 
+    [When("管理員為測點上傳 WAV 音效並儲存")]
+    public async Task WhenCustomAudioSaved()
+    {
+        PlayerSettings storage = new(_directory.FullName);
+        using MemoryStream stream = new("RIFF\0\0\0\0WAVE"u8.ToArray());
+        IFormFile upload = new FormFile(stream, 0, stream.Length, "alarmAudio", "提醒.wav");
+        string file = await storage.UploadAlarmAudioAsync(upload, CancellationToken.None);
+        Assert.That(storage.FindAlarmAudio(file), Is.Null);
+        PointPlan configured = _plan! with
+        {
+            AlarmSoundEnabled = true, AlarmTone = PointPlan.CustomAlarmTone,
+            AlarmAudioFile = file, AlarmAudioName = upload.FileName
+        };
+        Assert.That(storage.Save(storage.Read() with { PointPlans = [configured] }), Is.True);
+        _plan = storage.Read().PointPlans!.Single();
+    }
+
+    [Then("測點的自訂音效可讀取且不出現在日常或平面圖媒體中")]
+    public void ThenCustomAudioIsIsolated()
+    {
+        PlayerSettings storage = new(_directory.FullName);
+        string file = _plan!.AlarmAudioFile!;
+        Assert.That(_plan.AlarmAudioName, Is.EqualTo("提醒.wav"));
+        Assert.That(storage.FindAlarmAudio(file), Is.Not.Null);
+        Assert.That(storage.FindMedia(file), Is.Null);
+        Assert.That(storage.FindEngineeringMedia(file), Is.Null);
+    }
+
     [When("上傳工程平面圖")]
     public async Task WhenUploadFloorPlan()
     {

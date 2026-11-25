@@ -74,6 +74,7 @@ app.MapGet("/api/display", (WebAccessAlarmMonitor monitor, PlayerSettings player
         {
             marker.X, marker.Y, marker.Icon, marker.Flash, marker.ImageOnly, marker.AlarmTextSize, marker.IconSize,
             marker.AlarmSoundEnabled, marker.AlarmTone, marker.AlarmVolume,
+            AlarmSoundUrl = marker.AlarmAudioFile is string audio ? $"/alarm-audio/{audio}" : null,
             IconUrl = marker.IconFile is string file ? $"/engineering-media/{file}" : null
         },
         state.ConnectionStatus, state.LastSuccessAt,
@@ -96,6 +97,13 @@ app.MapGet("/engineering-media/{file}", (string file, PlayerSettings player, Htt
     context.Response.Headers.XContentTypeOptions = "nosniff";
     return player.FindEngineeringMedia(file) is string path
         ? Results.File(path, PlayerSettings.MimeType(Path.GetExtension(file)))
+        : Results.NotFound();
+});
+app.MapGet("/alarm-audio/{file}", (string file, PlayerSettings player, HttpContext context) =>
+{
+    context.Response.Headers.XContentTypeOptions = "nosniff";
+    return player.FindAlarmAudio(file) is string path
+        ? Results.File(path, PlayerSettings.AlarmAudioMimeType(Path.GetExtension(file)), enableRangeProcessing: true)
         : Results.NotFound();
 });
 if (OperatingSystem.IsWindows())
