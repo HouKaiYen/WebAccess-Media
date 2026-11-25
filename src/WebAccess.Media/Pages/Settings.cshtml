@@ -147,7 +147,10 @@
                             <option value="700">粗體</option>
                         </select>
                     </label>
-                    <button type="button" id="reset-marquee-range">清除格式</button>
+                    <button type="button" id="reset-marquee-range"
+                            data-default-color="@WebAccess.Media.Playlist.DefaultMarqueeTextColor"
+                            data-default-size="@WebAccess.Media.Playlist.DefaultMarqueeFontSize"
+                            data-default-weight="@WebAccess.Media.Playlist.DefaultMarqueeFontWeight">還原預設</button>
                 </fieldset>
             </div>
             <input asp-for="MarqueeCharacterStyles" type="hidden">

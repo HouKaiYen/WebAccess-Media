@@ -37,11 +37,12 @@ public sealed record Playlist(int Revision, PlaylistItem[] Items, bool IsMuted, 
     StandbyMedia[]? MediaLibrary = null)
 {
     public bool MarqueeEnabled { get; init; } = true;
-    public string MarqueeTextColor { get; init; } = "#ffffff";
+    public string MarqueeTextColor { get; init; } = DefaultMarqueeTextColor;
     public string MarqueeBackgroundColor { get; init; } = "#101923";
     public int MarqueeBackgroundOpacity { get; init; } = DefaultMarqueeBackgroundOpacity;
     public int MarqueeFontWeight { get; init; } = DefaultMarqueeFontWeight;
     public MarqueeCharacterStyle[] MarqueeCharacterStyles { get; init; } = [];
+    public const string DefaultMarqueeTextColor = "#ffffff";
     public const int DefaultMarqueeBackgroundOpacity = 91;
     public const int DefaultMarqueeFontWeight = 400;
     public const int DefaultMarqueeFontSize = 32;

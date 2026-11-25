@@ -19,7 +19,12 @@ function setupMarqueeCharacterEditor(textInput, readSettings, markDirty) {
     const color = document.getElementById('marquee-range-color');
     const size = document.getElementById('marquee-range-size');
     const weight = document.getElementById('marquee-range-weight');
-    const clear = document.getElementById('reset-marquee-range');
+    const reset = document.getElementById('reset-marquee-range');
+    const defaultStyle = {
+        textColor: reset.dataset.defaultColor,
+        fontSize: Number(reset.dataset.defaultSize),
+        fontWeight: Number(reset.dataset.defaultWeight)
+    };
     const segmenter = new Intl.Segmenter('zh-Hant', { granularity: 'grapheme' });
     const history = [];
     const redo = [];
@@ -119,7 +124,8 @@ function setupMarqueeCharacterEditor(textInput, readSettings, markDirty) {
             size.placeholder = selectedSize === null ? '混合' : '沿用全文';
             weight.options[0].textContent = selectedWeight === null ? '混合' : '沿用全文';
             weight.value = selectedWeight ?? '';
-            clear.disabled = !selected.some(character => Object.keys(character.style).length);
+            reset.disabled = selected.every(({ style }) => style.textColor === defaultStyle.textColor &&
+                style.fontSize === defaultStyle.fontSize && style.fontWeight === defaultStyle.fontWeight);
         }
         const highlights = globalThis.CSS?.highlights;
         if (highlights && typeof Highlight === 'function') {
@@ -261,8 +267,8 @@ function setupMarqueeCharacterEditor(textInput, readSettings, markDirty) {
         if (size.validity.valid) setFormat('fontSize', size.value ? size.valueAsNumber : null);
     });
     weight.addEventListener('change', () => setFormat('fontWeight', weight.value ? Number(weight.value) : null));
-    clear.addEventListener('click', () => {
-        formatSelected(character => { character.style = {}; });
+    reset.addEventListener('click', () => {
+        formatSelected(character => { character.style = { ...defaultStyle }; });
         color.focus();
     });
 
