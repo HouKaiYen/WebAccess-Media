@@ -35,14 +35,24 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: 驗證正式版本標籤
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           git merge-base --is-ancestor HEAD refs/remotes/origin/master
           if ($LASTEXITCODE -ne 0) {
             throw '正式版本標籤必須指向已合併至 master 的提交。'
           }
-          $tagType = git cat-file -t "refs/tags/$env:GITHUB_REF_NAME"
-          if ($LASTEXITCODE -ne 0 -or $tagType -ne 'tag') {
+          $tagRef = gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/$env:GITHUB_REF_NAME" --jq '.object'
+          if ($LASTEXITCODE -ne 0) {
+            throw '無法讀取 GitHub 上的版本標籤。'
+          }
+          $tag = $tagRef | ConvertFrom-Json
+          if ($tag.type -ne 'tag') {
             throw '請使用附有簡短版本說明的 annotated tag。'
+          }
+          $tagTarget = gh api "repos/$env:GITHUB_REPOSITORY/git/tags/$($tag.sha)" --jq '.object.sha'
+          if ($LASTEXITCODE -ne 0 -or $tagTarget -ne (git rev-parse HEAD)) {
+            throw 'GitHub 上的版本標籤與本次建置的提交不符。'
           }
       - uses: actions/download-artifact@v4
         with:
