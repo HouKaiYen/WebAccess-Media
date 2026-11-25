@@ -57,7 +57,7 @@ public sealed class PointsModel(
     {
         if (images.Count is < 1 or > 20 || images.Any(image => !IsFloorImage(image)))
         {
-            return LibraryError("請選取 1–20 張 PNG 或 JPEG。", 400);
+            return LibraryError("請選取 1–20 張 PNG 或 JPEG 格式的平面圖。", 400);
         }
 
         Playlist playlist = storage.Read();
@@ -112,7 +112,7 @@ public sealed class PointsModel(
             .Select(plan => plan.Point).ToArray();
         if (usingPoints.Length > 0)
         {
-            return LibraryError($"這張圖片仍由測點 {string.Join("、", usingPoints)} 使用。請先更換圖片。", 409);
+            return LibraryError($"這張平面圖仍由測點 {string.Join("、", usingPoints)} 使用。請先到測點設定更換檔案。", 409);
         }
         FloorImage[] images = playlist.FloorImages ?? [];
         FloorImage[] remaining = images.Where(image => image.File != file).ToArray();
@@ -131,11 +131,11 @@ public sealed class PointsModel(
         }
         catch (IOException)
         {
-            return LibraryResult(updated, "已從圖庫移除，圖片檔案暫時無法刪除。");
+            return LibraryResult(updated, "已從共用平面圖清單移除，本機檔案暫時無法刪除。");
         }
         catch (UnauthorizedAccessException)
         {
-            return LibraryResult(updated, "已從圖庫移除，圖片檔案無法刪除。");
+            return LibraryResult(updated, "已從共用平面圖清單移除，本機檔案無法刪除。");
         }
         return LibraryResult(updated, "已刪除平面圖。");
     }
@@ -163,7 +163,7 @@ public sealed class PointsModel(
         }
         if (image is not null && !IsFloorImage(image))
         {
-            return PointError("底圖限 PNG 或 JPEG。", 400, point, isNew, "image");
+            return PointError("平面圖限 PNG 或 JPEG 格式。", 400, point, isNew, "image");
         }
         if (!imageOnly)
         {
@@ -209,7 +209,7 @@ public sealed class PointsModel(
         string? selectedFile = shared?.File ?? previous?.File;
         if (image is null && selectedFile is null)
         {
-            return PointError("請選取共用平面圖或上傳一張圖片。", 400, name, isNew, "sharedFile");
+            return PointError("請選取共用平面圖或上傳新平面圖。", 400, name, isNew, "sharedFile");
         }
         string? iconFile = previous?.IconFile;
         if (!imageOnly && icon == "custom" && customIcon is null && iconFile is null)
@@ -297,7 +297,7 @@ public sealed class PointsModel(
         Feedback = storage.Save(playlist with
         {
             PointPlans = (playlist.PointPlans ?? []).Where(plan => plan.Point != point).ToArray()
-        }) ? "已移除測點平面圖。" : "設定已更新，請再試一次。";
+        }) ? "已移除測點頁面。" : "設定已更新，請再試一次。";
         return RedirectToPage(new { selected = selected == point ? null : selected, add });
     }
 }
