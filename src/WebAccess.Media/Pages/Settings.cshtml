@@ -38,6 +38,14 @@
         .switch input:checked::before { transform: translateX(.95rem); }
         dialog { width: min(92vw, 880px); background: var(--panel); color: inherit; border: 1px solid var(--border); border-radius: .6rem; padding: 1rem; }
         dialog::backdrop { background: #060b13cc; }
+        .media-list { display: grid; gap: .5rem; max-height: min(52vh, 28rem); overflow: auto; margin: .75rem 0 0; padding: .25rem; list-style: none; }
+        .media-entry { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; padding: .55rem; border: 1px solid var(--line); border-radius: .4rem; }
+        .media-entry .thumb { width: 56px; height: 36px; border-radius: .25rem; background: var(--background); }
+        .media-type { display: grid; place-items: center; color: var(--muted); }
+        .media-name { flex: 1 1 8rem; overflow-wrap: anywhere; }
+        .media-actions { display: flex; flex-wrap: wrap; gap: .35rem; margin-left: auto; }
+        .media-actions button:disabled { cursor: default; }
+        .media-actions [data-delete] { color: #a42c3e; }
         .preview { position: relative; height: min(55vh, 480px); display: grid; place-items: center; background: #05090e; overflow: hidden; }
         .preview img, .preview video { max-width: 100%; max-height: 100%; }
         #preview-media { display: grid; place-items: center; width: 100%; height: 100%; overflow: hidden; }
@@ -65,9 +73,10 @@
             <div class="section-heading toolbar">
                 <div><h2>播放清單 <span class="count" id="playlist-count">@Model.Items.Count</span></h2><p>圖片依序循環播放，影片播完後切換。</p></div>
                 <input form="upload-form" id="upload-media" type="file" name="media" aria-label="新增媒體檔案" accept=".png,.jpg,.jpeg,.gif,.mp4" hidden>
-                <button type="button" id="choose-media">＋ 新增媒體</button>
+                <button type="button" id="open-media-library" aria-haspopup="dialog">從現有媒體選取</button>
+                <button type="button" id="choose-media">＋ 上傳新媒體</button>
             </div>
-            <p class="file-note">支援 PNG、JPEG、GIF、MP4。圖片與 GIF 上限 20 MB，MP4 上限 100 MB。移除項目並儲存後，會刪除未被使用的本機副本。</p>
+            <p class="file-note">支援 PNG、JPEG、GIF、MP4。圖片與 GIF 上限 20 MB，MP4 上限 100 MB。從播放清單移除的媒體仍可在「現有媒體」重新選取。</p>
             <p class="feedback" id="upload-status" role="status" hidden></p>
             <div id="playlist-empty" class="empty" hidden="@(Model.Items.Count > 0)"><strong>播放清單目前是空的</strong><span>新增媒體後，待機畫面會依序循環播放。</span></div>
             <div id="playlist">
@@ -106,6 +115,23 @@
         </section></div>
     </form>
 </main>
+<dialog id="media-library" aria-labelledby="media-library-title">
+    <form method="dialog" class="toolbar"><h2 id="media-library-title">現有媒體</h2><button id="close-media-library">關閉</button></form>
+    <p class="muted">若要刪除使用中的本機檔案，請先從播放清單移除並儲存。</p>
+    <p id="media-library-status" class="feedback" role="status" hidden></p>
+    <ul class="media-list" id="media-library-items"></ul>
+</dialog>
+<template id="media-entry-template">
+    <li class="media-entry">
+        <img class="thumb" alt="" width="56" height="36" loading="lazy" hidden>
+        <span class="thumb media-type" hidden>MP4</span>
+        <strong class="media-name"></strong>
+        <div class="media-actions">
+            <button type="button" data-add>加入清單</button>
+            <button type="button" data-delete>刪除檔案</button>
+        </div>
+    </li>
+</template>
 <dialog id="preview-dialog" aria-label="待機畫面預覽">
     <form method="dialog" class="toolbar"><h2>待機畫面預覽</h2><button>關閉</button></form>
     <div class="preview"><div id="preview-media"></div><div class="marquee" id="preview-marquee" hidden><span></span></div></div>
@@ -121,7 +147,11 @@ const savePlaylist = document.getElementById('save-playlist');
 const uploadForm = document.getElementById('upload-form');
 const uploadStatus = document.getElementById('upload-status');
 const playlistRevision = document.getElementById('Revision');
-let uploading = false;
+const mediaLibrary = document.getElementById('media-library');
+const openMediaLibrary = document.getElementById('open-media-library');
+const mediaLibraryStatus = document.getElementById('media-library-status');
+const mediaLibraryItems = document.getElementById('media-library-items');
+let mediaBusy = false;
 function updatePlaylistCount() {
     const count = list.querySelectorAll('.row:not([hidden])').length;
     document.getElementById('playlist-count').textContent = count;
@@ -129,50 +159,142 @@ function updatePlaylistCount() {
 }
 chooseMedia.addEventListener('click', () => upload.click());
 upload.addEventListener('change', async () => {
-    if (!upload.files.length || uploading) return;
-    const body = new FormData(uploadForm);
-    body.set('revision', playlistRevision.value);
-    uploading = true;
-    chooseMedia.disabled = true;
-    savePlaylist.disabled = true;
-    uploadStatus.hidden = false;
-    uploadStatus.textContent = '正在上傳媒體…';
+    if (!upload.files.length || mediaBusy) return;
     try {
-        const response = await fetch(uploadForm.action, { method: 'POST', headers: { 'X-Playlist-Upload': 'row' }, body });
+        await postMedia(uploadForm.action, new FormData(uploadForm), uploadStatus, '正在上傳媒體…', appendMediaRow, true);
+    } finally {
+        upload.value = '';
+    }
+});
+function setMediaStatus(status, message) {
+    status.textContent = message;
+    status.hidden = !message;
+}
+function setMediaBusy(busy) {
+    mediaBusy = busy;
+    chooseMedia.disabled = busy;
+    savePlaylist.disabled = busy;
+    openMediaLibrary.disabled = busy;
+    mediaLibraryItems.inert = busy;
+}
+async function postMedia(url, body, status, pending, complete, expectsRow = false) {
+    body.set('revision', playlistRevision.value);
+    setMediaBusy(true);
+    setMediaStatus(status, pending);
+    try {
+        const headers = expectsRow ? { 'X-Playlist-Upload': 'row' } : {};
+        const response = await fetch(url, { method: 'POST', headers, body });
         if (!response.ok) {
             const error = await response.json();
-            uploadStatus.textContent = error.message;
+            setMediaStatus(status, error.message);
+            return false;
+        }
+        await complete(response);
+        return true;
+    } catch {
+        setMediaStatus(status, '無法完成媒體操作。請確認連線或檔案大小後重試。');
+        return false;
+    } finally {
+        setMediaBusy(false);
+    }
+}
+async function appendMediaRow(response) {
+    const revision = response.headers.get('X-Playlist-Revision');
+    const documentFragment = new DOMParser().parseFromString(await response.text(), 'text/html');
+    const row = documentFragment.querySelector('.row');
+    if (!row || !revision) throw new Error();
+    list.append(row);
+    playlistRevision.value = revision;
+    updatePlaylistCount();
+    setMediaStatus(uploadStatus, '已加入播放清單。');
+}
+function findPlaylistRow(file) {
+    return [...list.querySelectorAll('.row')].find(row => row.dataset.file === file);
+}
+function createMediaEntry(media) {
+    const entry = document.getElementById('media-entry-template').content.firstElementChild.cloneNode(true);
+    entry.dataset.file = media.file;
+    entry.dataset.name = media.name;
+    entry.querySelector('.media-name').textContent = media.name;
+    const picture = entry.querySelector('img');
+    const isVideo = media.file.endsWith('.mp4');
+    entry.querySelector('.media-type').hidden = !isVideo;
+    if (!isVideo) {
+        picture.hidden = false;
+        picture.src = '/media/' + encodeURIComponent(media.file);
+    }
+    const add = entry.querySelector('[data-add]');
+    add.disabled = media.isInPlaylist && !findPlaylistRow(media.file)?.hidden;
+    add.textContent = add.disabled ? '已在播放清單' : '加入清單';
+    add.setAttribute('aria-label', add.disabled ? media.name + ' 已在播放清單' : '將 ' + media.name + ' 加入播放清單');
+    const remove = entry.querySelector('[data-delete]');
+    remove.disabled = media.isInPlaylist;
+    remove.setAttribute('aria-label', '刪除檔案 ' + media.name);
+    return entry;
+}
+openMediaLibrary.addEventListener('click', async () => {
+    if (mediaBusy) return;
+    mediaLibraryItems.replaceChildren();
+    setMediaStatus(mediaLibraryStatus, '正在載入現有媒體…');
+    mediaLibrary.showModal();
+    setMediaBusy(true);
+    try {
+        const response = await fetch('/settings?handler=MediaLibrary', { cache: 'no-store' });
+        if (!response.ok) throw new Error();
+        const media = await response.json();
+        mediaLibraryItems.replaceChildren(...media.map(createMediaEntry));
+        setMediaStatus(mediaLibraryStatus, media.length ? '' : '目前沒有已上傳的媒體。');
+    } catch {
+        setMediaStatus(mediaLibraryStatus, '無法載入現有媒體。請關閉視窗後重試。');
+    } finally {
+        setMediaBusy(false);
+    }
+});
+mediaLibraryItems.addEventListener('click', async event => {
+    const button = event.target.closest('button');
+    if (!button || mediaBusy) return;
+    const entry = button.closest('[data-file]');
+    const file = entry.dataset.file;
+    const body = new FormData(uploadForm);
+    body.delete('media');
+    body.set('file', file);
+    if (button.hasAttribute('data-add')) {
+        const row = findPlaylistRow(file);
+        if (row?.hidden) {
+            row.querySelector('[name=remove]').remove();
+            setRowRemoved(row, false);
+            mediaLibrary.close();
+            setMediaStatus(uploadStatus, '已還原到播放清單。');
             return;
         }
-        const revision = response.headers.get('X-Playlist-Revision');
-        const documentFragment = new DOMParser().parseFromString(await response.text(), 'text/html');
-        const row = documentFragment.querySelector('.row');
-        if (!row || !revision) throw new Error();
-        list.append(row);
-        playlistRevision.value = revision;
-        updatePlaylistCount();
-        uploadStatus.textContent = '已加入播放清單。';
-    } catch {
-        uploadStatus.textContent = '無法完成上傳。請確認連線及檔案大小後重試。';
-    } finally {
-        uploading = false;
-        chooseMedia.disabled = false;
-        savePlaylist.disabled = false;
-        upload.value = '';
+        if (await postMedia('/settings?handler=AddExisting', body, mediaLibraryStatus, '正在加入播放清單…', appendMediaRow, true)) {
+            mediaLibrary.close();
+        }
+    } else if (window.confirm('確定要刪除本機檔案「' + entry.dataset.name + '」？')) {
+        await postMedia('/settings?handler=DeleteMedia', body, mediaLibraryStatus, '正在刪除檔案…', async response => {
+            const result = await response.json();
+            playlistRevision.value = result.revision;
+            entry.remove();
+            document.getElementById('close-media-library').focus();
+            setMediaStatus(mediaLibraryStatus, mediaLibraryItems.children.length ? '已刪除本機檔案。' : '已刪除本機檔案。現有媒體清單已空。');
+        });
     }
 });
 function markDirty() {
     dirty = true;
     document.getElementById('draft-status').textContent = '有未儲存變更';
 }
+function setRowRemoved(row, removed) {
+    row.hidden = removed;
+    for (const input of row.querySelectorAll('input:not([name=remove])')) {
+        input.disabled = removed;
+    }
+    updatePlaylistCount();
+    markDirty();
+}
 playlistForm.addEventListener('input', markDirty);
 playlistForm.addEventListener('submit', event => {
-    if (uploading) {
-        event.preventDefault();
-        return;
-    }
-    const removedCount = playlistForm.querySelectorAll('input[name=remove]').length;
-    if (removedCount && !window.confirm('確定要儲存並移除 ' + removedCount + ' 項媒體？未被引用的本機副本也會刪除。')) {
+    if (mediaBusy) {
         event.preventDefault();
         return;
     }
@@ -191,10 +313,8 @@ list.addEventListener('click', function (event) {
         removed.type = 'hidden';
         removed.name = 'remove';
         removed.value = row.dataset.file;
-        playlistForm.append(removed);
-        row.hidden = true;
-        updatePlaylistCount();
-        markDirty();
+        row.append(removed);
+        setRowRemoved(row, true);
         return;
     }
     const direction = event.target.dataset.move;
