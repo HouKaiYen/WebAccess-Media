@@ -55,6 +55,9 @@ public sealed record Playlist(int Revision, PlaylistItem[] Items, bool IsMuted, 
 
 public sealed class PlayerSettings(string directory)
 {
+    public static string DefaultDirectory =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WebAccess-Media");
+    public string StorageDirectory => directory;
     public const int MaxAlarmAudioMegabytes = 10;
     private readonly string _path = Path.Combine(directory, "playlist.json");
     private readonly string _mediaDirectory = Path.Combine(directory, "media");
