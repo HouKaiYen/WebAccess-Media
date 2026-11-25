@@ -3,6 +3,7 @@ function normalizeMarqueeText(value) {
 }
 
 function setupMarqueeCharacterEditor(textInput, readSettings, markDirty) {
+    const editorPanel = document.getElementById('marquee-editor');
     const editor = document.getElementById('marquee-rich-text');
     const hiddenStyles = document.getElementById('MarqueeCharacterStyles');
     if (typeof Intl.Segmenter !== 'function' || !editor.isContentEditable) {
@@ -17,9 +18,11 @@ function setupMarqueeCharacterEditor(textInput, readSettings, markDirty) {
     const tools = document.getElementById('marquee-range-tools');
     const status = document.getElementById('marquee-editor-status');
     const color = document.getElementById('marquee-range-color');
+    const colorStatus = document.getElementById('marquee-range-color-status');
     const size = document.getElementById('marquee-range-size');
     const weight = document.getElementById('marquee-range-weight');
     const reset = document.getElementById('reset-marquee-range');
+    const inheritStyle = document.getElementById('inherit-marquee-range');
     const defaultStyle = {
         textColor: reset.dataset.defaultColor,
         fontSize: Number(reset.dataset.defaultSize),
@@ -115,15 +118,18 @@ function setupMarqueeCharacterEditor(textInput, readSettings, markDirty) {
     function updateToolbar() {
         const selected = selectedCharacters();
         tools.disabled = selected.length === 0;
-        status.textContent = selected.length ? '已選取 ' + selected.length + ' 個字元' : '反白選取文字後，可套用格式。';
+        const message = selected.length ? '已選取 ' + selected.length + ' 個字元' : '反白選取要調整的文字。';
+        if (status.textContent !== message) status.textContent = message;
+        const selectedColor = uniformStyle(selected, 'textColor');
+        colorStatus.textContent = !selected.length ? '' : selectedColor === null ? '混合' : selectedColor ?? '沿用全文';
         if (selected.length) {
             const selectedSize = uniformStyle(selected, 'fontSize');
             const selectedWeight = uniformStyle(selected, 'fontWeight');
-            color.value = uniformStyle(selected, 'textColor') || document.getElementById('MarqueeTextColor').value;
+            color.value = selectedColor ?? document.getElementById('MarqueeTextColor').value;
             if (document.activeElement !== size) size.value = selectedSize ?? '';
             size.placeholder = selectedSize === null ? '混合' : '沿用全文';
-            weight.options[0].textContent = selectedWeight === null ? '混合' : '沿用全文';
-            weight.value = selectedWeight ?? '';
+            weight.value = selectedWeight === null ? 'mixed' : selectedWeight ?? '';
+            inheritStyle.disabled = !selected.some(({ style }) => Object.keys(style).length);
             reset.disabled = selected.every(({ style }) => style.textColor === defaultStyle.textColor &&
                 style.fontSize === defaultStyle.fontSize && style.fontWeight === defaultStyle.fontWeight);
         }
@@ -246,8 +252,15 @@ function setupMarqueeCharacterEditor(textInput, readSettings, markDirty) {
         updateToolbar();
     }
 
+    function releaseSelection(event) {
+        if (editorPanel.contains(event.target) || selection.start === selection.end) return;
+        selection = { start: selection.end, end: selection.end };
+        if (selectionInsideEditor()) window.getSelection().removeAllRanges();
+        updateToolbar();
+    }
+
     textInput.hidden = true;
-    document.getElementById('marquee-editor').hidden = false;
+    editorPanel.hidden = false;
     applyMarqueeAppearance(editor, readSettings());
     render(false);
     document.getElementById('marquee-text-label').addEventListener('click', event => {
@@ -258,6 +271,8 @@ function setupMarqueeCharacterEditor(textInput, readSettings, markDirty) {
     document.addEventListener('selectionchange', () => {
         if (!composing && document.activeElement === editor) captureSelection();
     });
+    document.addEventListener('pointerdown', releaseSelection);
+    document.addEventListener('focusin', releaseSelection);
     editor.addEventListener('blur', updateToolbar);
     tools.addEventListener('pointerdown', () => {
         if (document.activeElement === editor) captureSelection();
@@ -267,6 +282,10 @@ function setupMarqueeCharacterEditor(textInput, readSettings, markDirty) {
         if (size.validity.valid) setFormat('fontSize', size.value ? size.valueAsNumber : null);
     });
     weight.addEventListener('change', () => setFormat('fontWeight', weight.value ? Number(weight.value) : null));
+    inheritStyle.addEventListener('click', () => {
+        formatSelected(character => { character.style = {}; });
+        color.focus();
+    });
     reset.addEventListener('click', () => {
         formatSelected(character => { character.style = { ...defaultStyle }; });
         color.focus();
