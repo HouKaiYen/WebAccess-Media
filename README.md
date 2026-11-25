@@ -12,6 +12,8 @@
 
 若要變更 Port，請停止程式，編輯與 `WebAccess.Media.exe` 同一資料夾中的 `server-settings.json`，再啟動 `.exe` 或 `.cmd`。兩種入口都讀取其中的 `Port`，預設為 `3008`。指定 `--urls` 時會優先使用該監聽網址。
 
+同一個資料儲存目錄只能由一個服務使用。若已有服務在執行，重複啟動時會在主控台提示目前的監聽網址。
+
 ## Windows 通知區
 
 雙擊 `WebAccess.Media.exe` 啟動後，Windows 通知區會顯示 WebAccess Media 圖示。若圖示收在溢位選單，請點右下角的「^」。滑鼠停留或按右鍵可查看 Port、服務與 WebAccess 連線狀態，雙擊可開啟日常管理。選擇「結束 WebAccess Media」會停止該圖示對應的服務並收起圖示，該服務的播放與監控也會停止。通知區圖示需要已登入 Windows 的桌面工作階段。

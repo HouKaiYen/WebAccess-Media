@@ -130,6 +130,11 @@ public sealed class SettingsModel(PlayerSettings storage) : PageModel
             return storage.DeleteStandbyMedia(file, revision) switch
             {
                 StandbyMediaDeletion.Deleted => new JsonResult(new { revision = revision + 1 }),
+                StandbyMediaDeletion.CleanupPending => new JsonResult(new
+                {
+                    revision = revision + 1,
+                    message = "已從現有媒體移除。程式下次啟動時會再清理本機檔案。"
+                }),
                 StandbyMediaDeletion.InUse => MediaError("檔案仍在使用中。請先從播放清單移除並儲存。", 409),
                 StandbyMediaDeletion.NotFound => MediaError("找不到這個媒體檔案。", 404),
                 _ => MediaError("清單已在其他地方更新，請重新整理後再刪除。", 409)

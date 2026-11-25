@@ -137,7 +137,6 @@ function play(index) {
     if (standby.firstChild === element) play((index + 1) % playlist.items.length);
   };
   if (item.isVideo) {
-    element.autoplay = true;
     element.playsInline = true;
     element.muted = playlist.isMuted;
     element.loop = playlist.items.length === 1;
@@ -146,12 +145,25 @@ function play(index) {
     element.alt = item.name;
   }
   element.onerror = () => {
+    if (standby.firstChild !== element) return;
     clearTimeout(timer);
     timer = setTimeout(next, 3000);
   };
   standby.replaceChildren(element);
   element.src = '/media/' + encodeURIComponent(item.file);
-  if (!item.isVideo && playlist.items.length > 1) timer = setTimeout(next, item.seconds * 1000);
+  if (item.isVideo) {
+    element.play().catch(error => {
+      if (standby.firstChild !== element) return;
+      if (error.name === 'NotAllowedError' && !element.muted) {
+        element.muted = true;
+        element.play().catch(() => element.onerror());
+      } else {
+        element.onerror();
+      }
+    });
+  } else if (playlist.items.length > 1) {
+    timer = setTimeout(next, item.seconds * 1000);
+  }
 }
 function setStandby(next) {
   const nextRevision = next ? next.revision : null;

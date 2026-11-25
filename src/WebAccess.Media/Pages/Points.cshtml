@@ -191,6 +191,7 @@
                         <a asp-page="Points" asp-route-selected="@plan.Point" aria-current="@(Model.Selected?.Point == plan.Point ? "page" : null)">@plan.Point</a>
                         <form method="post" asp-page-handler="Remove" asp-route-selected="@Model.Selected?.Point"
                               asp-route-add="@(Model.Selected is null)" data-remove-point="@plan.Point">
+                            <input type="hidden" name="revision" value="@Model.Revision">
                             <button type="submit" name="point" value="@plan.Point" aria-label="刪除測點 @plan.Point">刪除</button>
                         </form>
                     </li>
@@ -403,6 +404,7 @@
                 @if (Model.Selected is WebAccess.Media.PointPlan current)
                 {
                     <form class="remove" method="post" asp-page-handler="Remove" data-remove-point="@current.Point">
+                        <input type="hidden" name="revision" value="@Model.Revision">
                         <button name="point" value="@current.Point">移除測點頁面</button>
                     </form>
                 }
@@ -886,6 +888,9 @@ async function updateLibrary(endpoint, body, pending) {
         libraryStatus.textContent = result.message;
         if (response.ok) {
             revision.value = result.revision;
+            for (const field of document.querySelectorAll('form[data-remove-point] input[name="revision"]')) {
+                field.value = result.revision;
+            }
             renderLibrary(result.images);
         }
     } catch {

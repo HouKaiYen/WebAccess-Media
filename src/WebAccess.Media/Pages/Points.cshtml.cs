@@ -336,9 +336,14 @@ public sealed class PointsModel(
         (playlist.FloorImages ?? []).Concat((playlist.PointPlans ?? []).Select(plan => new FloorImage(plan.File, plan.Point)))
             .DistinctBy(image => image.File).ToArray();
 
-    public IActionResult OnPostRemove(string point, string? selected, bool add = false)
+    public IActionResult OnPostRemove(string point, int? revision, string? selected, bool add = false)
     {
         Playlist playlist = storage.Read();
+        if (playlist.Revision != revision)
+        {
+            Feedback = "設定已更新，請確認最新內容後再刪除。";
+            return RedirectToPage(new { selected, add });
+        }
         bool saved = storage.Save(playlist with
         {
             PointPlans = (playlist.PointPlans ?? []).Where(plan => plan.Point != point).ToArray()

@@ -59,6 +59,7 @@ public sealed class PlayerSettings(string directory)
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WebAccess-Media");
     public string StorageDirectory => directory;
     public const int MaxAlarmAudioMegabytes = 10;
+    private const string PendingDeleteSuffix = ".pending-delete";
     private readonly string _path = Path.Combine(directory, "playlist.json");
     private readonly string _mediaDirectory = Path.Combine(directory, "media");
     private readonly string _engineeringDirectory = Path.Combine(directory, "engineering-media");
@@ -251,9 +252,60 @@ public sealed class PlayerSettings(string directory)
                 return StandbyMediaDeletion.InUse;
             }
 
-            RemoveMedia(media.File);
             StandbyMedia[] remaining = (playlist.MediaLibrary ?? []).Where(item => item.File != media.File).ToArray();
-            return Save(playlist with { MediaLibrary = remaining }) ? StandbyMediaDeletion.Deleted : StandbyMediaDeletion.Stale;
+            string? original = FindMedia(_mediaDirectory, media.File);
+            string pending = original + PendingDeleteSuffix;
+            if (original is not null) File.Move(original, pending);
+
+            bool saved = false;
+            try
+            {
+                saved = Save(playlist with { MediaLibrary = remaining });
+            }
+            finally
+            {
+                if (!saved && original is not null) File.Move(pending, original);
+            }
+            if (!saved) return StandbyMediaDeletion.Stale;
+
+            try
+            {
+                if (original is not null) File.Delete(pending);
+                return StandbyMediaDeletion.Deleted;
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                return StandbyMediaDeletion.CleanupPending;
+            }
+        }
+    }
+
+    internal void RecoverStandbyMediaDeletes(ILogger logger)
+    {
+        if (!Directory.Exists(_mediaDirectory)) return;
+        try
+        {
+            string[] pendingDeletes = Directory.GetFiles(_mediaDirectory, $"*{PendingDeleteSuffix}");
+            if (pendingDeletes.Length == 0) return;
+            Playlist playlist = Read();
+            foreach (string pending in pendingDeletes)
+            {
+                string original = pending[..^PendingDeleteSuffix.Length];
+                string file = Path.GetFileName(original);
+                if (!Guid.TryParseExact(Path.GetFileNameWithoutExtension(file), "N", out _) ||
+                    MimeType(Path.GetExtension(file)) is null) continue;
+
+                // 清單仍有紀錄代表上次尚未完成儲存，應復原暫移的檔案。
+                bool isReferenced = (playlist.MediaLibrary ?? []).Any(media =>
+                    string.Equals(media.File, file, StringComparison.OrdinalIgnoreCase)) ||
+                    IsInPlaylist(playlist, file) || IsEngineeringReference(playlist, file);
+                if (isReferenced && !File.Exists(original)) File.Move(pending, original);
+                else File.Delete(pending);
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
+        {
+            logger.LogWarning(error, "無法復原或清理先前暫移的媒體檔案。");
         }
     }
 
@@ -335,5 +387,6 @@ public enum StandbyMediaDeletion
     Deleted,
     Stale,
     NotFound,
-    InUse
+    InUse,
+    CleanupPending
 }
