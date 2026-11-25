@@ -30,10 +30,16 @@ img { max-width: 100%; max-height: 75vh; object-fit: contain; }
 p { color: #ffc47a; }
 #title { overflow-wrap: anywhere; white-space: pre-wrap; }
 [hidden] { display: none !important; }
-#standby { position: fixed; inset: 0; background: #000; }
+#standby { position: fixed; inset: var(--marquee-top-height, 0px) 0 var(--marquee-bottom-height, 0px); background: #000; }
 #standby img, #standby video { width: 100%; height: 100%; max-height: none; object-fit: contain; }
 #marquee { position: fixed; }
 #status { position: relative; }
+#setup-warning {
+  position: fixed; top: calc(.75rem + var(--marquee-top-height, 0px)); right: .75rem; z-index: 1;
+  box-sizing: border-box; max-width: calc(100% - 1.5rem); margin: 0; padding: .5rem .75rem;
+  border: 1px solid #895823; border-radius: .5rem; background: #2d2115; color: #ffd28f;
+  font: 600 clamp(.875rem, 2vw, 1rem)/1.45 var(--app-font); pointer-events: none;
+}
 #play-alarm-sound {
   position: fixed; top: .75rem; right: .75rem; z-index: 1;
   padding: .5rem .75rem; border: 1px solid #cbd6e4; border-radius: .4rem;
@@ -52,6 +58,7 @@ body.image-only #title, body.image-only #status { display: none; }
   <div id="plan-frame" hidden><img id="plan" alt="測點平面圖"><span class="alarm-icon" id="marker" hidden><img id="marker-image" alt="" hidden></span></div>
   <div id="standby" hidden></div>
   <div class="marquee" id="marquee" hidden><span></span></div>
+  <p id="setup-warning" role="status" hidden>尚未設定 WebAccess</p>
   <button id="play-alarm-sound" type="button" hidden>播放警報提示音</button>
   <p id="status" role="status"></p>
 </main>
@@ -65,7 +72,9 @@ const marker = document.getElementById('marker');
 const markerImage = document.getElementById('marker-image');
 const status = document.getElementById('status');
 const standby = document.getElementById('standby');
-const renderMarquee = createMarqueeRenderer(document.getElementById('marquee'));
+const marquee = document.getElementById('marquee');
+const setupWarning = document.getElementById('setup-warning');
+const renderMarquee = createMarqueeRenderer(marquee, main);
 const alarmAudio = new Audio();
 const playAlarmSoundButton = document.getElementById('play-alarm-sound');
 let activeSound = null;
@@ -199,6 +208,7 @@ async function refresh() {
       (!!url && plan.getAttribute('src') !== url);
     document.body.classList.toggle('alarm-active', !!alarm);
     if (title.textContent !== titleText) title.textContent = titleText;
+    title.hidden = !alarm && (!standby.hidden || !marquee.hidden);
     alarmTextSize = nextTextSize;
     document.body.classList.toggle('image-only', imageOnly);
     frame.hidden = !url;
@@ -217,10 +227,12 @@ async function refresh() {
     }
     updateAlarmSound(alarm, appearance);
     const lastSuccess = state.lastSuccessAt ? '，最後更新 ' + new Date(state.lastSuccessAt).toLocaleString('zh-TW') : '';
-    const messages = { disconnected: 'WebAccess 連線異常' + lastSuccess, connecting: '正在連線至 WebAccess', unconfigured: '尚未設定 WebAccess' };
+    const messages = { disconnected: 'WebAccess 連線異常' + lastSuccess, connecting: '正在連線至 WebAccess' };
+    setupWarning.hidden = preview || state.connectionStatus !== 'unconfigured';
     showStatus(preview ? '' : messages[state.connectionStatus] || '');
     if (fitChanged) scheduleAlarmFit();
   } catch {
+    setupWarning.hidden = true;
     showStatus('顯示服務連線中斷');
   } finally {
     setTimeout(refresh, 2000);
