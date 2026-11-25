@@ -50,9 +50,11 @@ internal static class Program
         ToolStripMenuItem exit = new("結束 WebAccess Media") { Enabled = startupId is null };
         ToolStripMenuItem closeIcon = new("關閉通知區圖示") { Visible = startupId is not null };
         menu.Items.AddRange([status, open, new ToolStripSeparator(), exit, closeIcon]);
+        using Stream iconStream = typeof(Program).Assembly.GetManifestResourceStream("WebAccess.Media.Tray.AppIcon")!;
+        using Icon applicationIcon = new(iconStream, SystemInformation.SmallIconSize);
         using NotifyIcon icon = new()
         {
-            Icon = SystemIcons.Application,
+            Icon = applicationIcon,
             Text = "WebAccess Media",
             ContextMenuStrip = menu,
             Visible = true

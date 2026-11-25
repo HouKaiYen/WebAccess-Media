@@ -6,19 +6,19 @@
 
 1. 取得 `WebAccess-Media-win-x64.zip`。GitHub Actions 有執行記錄時，可從 Windows CI 的 Artifacts 下載同名套件。
 2. 完整解壓縮至固定資料夾，例如 `C:\WebAccess-Media`。套件已包含 .NET Runtime。
-3. 雙擊 `Start-WebAccess-Media.cmd`，保持視窗開啟。
+3. 雙擊有藍色圖示的 `WebAccess.Media.exe`，保持視窗開啟。也可使用 `Start-WebAccess-Media.cmd` 啟動。
 4. 開啟 [日常管理](http://127.0.0.1:3008/settings)，可切換至工程設定或顯示頁。
 5. 在程式視窗按 `Ctrl+C` 停止監控。
 
 ## Windows 通知區
 
-使用 `Start-WebAccess-Media.cmd` 啟動後，Windows 通知區會顯示 WebAccess Media 圖示。若圖示收在溢位選單，請點右下角的「^」。滑鼠停留或按右鍵可查看服務與 WebAccess 連線狀態，雙擊可開啟日常管理。選擇「結束 WebAccess Media」會停止該圖示對應的服務並收起圖示，該服務的播放與監控也會停止。通知區圖示需要已登入 Windows 的桌面工作階段。
+雙擊 `WebAccess.Media.exe` 啟動後，Windows 通知區會顯示 WebAccess Media 圖示。若圖示收在溢位選單，請點右下角的「^」。滑鼠停留或按右鍵可查看服務與 WebAccess 連線狀態，雙擊可開啟日常管理。選擇「結束 WebAccess Media」會停止該圖示對應的服務並收起圖示，該服務的播放與監控也會停止。通知區圖示需要已登入 Windows 的桌面工作階段。
 
 ## 工程設定
 
 ### 開機自動啟動
 
-1. 把完整 Windows ZIP 解壓到固定的本機資料夾，從桌面執行 `Start-WebAccess-Media.cmd`。若使用其他 Port 或開放 BrightSign 連線，先以實際監聽參數啟動。
+1. 把完整 Windows ZIP 解壓到固定的本機資料夾，雙擊 `WebAccess.Media.exe`。若使用其他 Port 或開放 BrightSign 連線，先以實際監聽參數啟動。
 2. 在工程設定左側點「開機自動啟動」，勾選開關並按「儲存設定」。
 3. 首次建立排程時，核准 Windows 管理員提示，接著在 Windows 對話框輸入目前帳號的**登入密碼**。排程以這個帳號執行，沿用設定資料、DPAPI 及目前的監聽位址。程式會把密碼交給 Windows 工作排程器。
 4. 等待頁面顯示設定結果。工作排程器程式庫會出現「WebAccess Media - 開機監控」與「WebAccess Media - 登入通知區」。重開機後可先由另一台內網裝置驗證服務，再登入檢查通知區圖示。
