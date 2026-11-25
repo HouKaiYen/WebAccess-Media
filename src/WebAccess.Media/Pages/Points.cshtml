@@ -159,7 +159,7 @@
         <details class="library-section" id="floor-library">
             <summary>共用平面圖 <small id="floor-count" class="sidebar-count">@Model.FloorImages.Length 張</small></summary>
             <form id="floor-upload" method="post" asp-page-handler="UploadFloorImages" enctype="multipart/form-data">
-                <label>選取底圖即上傳 <input id="floor-upload-input" name="images" type="file" multiple accept=".png,.jpg,.jpeg"></label>
+                <label>選取平面圖即上傳 <input id="floor-upload-input" name="images" type="file" multiple accept=".png,.jpg,.jpeg"></label>
             </form>
             <p id="floor-status" class="feedback" role="status"></p>
             <div class="floor-grid" id="floor-grid">
@@ -169,7 +169,7 @@
                         <button class="floor-card" type="button" data-floor="@floor.File" title="@floor.Name" aria-pressed="@(Model.Selected?.File == floor.File ? "true" : "false")">
                             <img src="/engineering-media/@floor.File" alt="" width="120" height="90" loading="lazy"><span>@floor.Name</span>
                         </button>
-                        <button class="floor-delete" type="button" data-delete="@floor.File" aria-label="刪除 @floor.Name">刪除</button>
+                        <button class="floor-delete" type="button" data-delete="@floor.File" aria-label="刪除平面圖 @floor.Name">刪除</button>
                     </div>
                 }
             </div>
@@ -200,13 +200,13 @@
             <div class="canvas card">
                 <div class="canvas-heading">
                     <h2>平面圖預覽</h2>
-                    <p class="muted" id="position-hint" hidden="@(Model.Selected is null || Model.Selected.ImageOnly)">點選底圖或拖曳圖示即可定位</p>
+                    <p class="muted" id="position-hint" hidden="@(Model.Selected is null || Model.Selected.ImageOnly)">點選平面圖或拖曳圖示即可定位</p>
                 </div>
                 <div class="canvas-stage">
                     <div id="empty-plan" class="canvas-empty" hidden="@(Model.Selected is not null)">
-                        <h3>先為測點選擇底圖</h3>
-                        <p class="muted">可上傳新圖片或從共用平面圖選取。</p>
-                        <button id="choose-plan" type="button" class="primary">選擇底圖</button>
+                        <h3>先為測點選擇平面圖</h3>
+                        <p class="muted">可從共用平面圖選取，也可上傳新檔案。</p>
+                        <button id="choose-plan" type="button" class="primary">選擇平面圖</button>
                     </div>
                     <div id="alarm-preview-group" hidden="@(Model.Selected is null)">
                         <h2 id="alarm-preview" data-api-text="@Model.CurrentAlarmText"></h2>
@@ -232,28 +232,28 @@
                     <input id="point-revision" name="revision" type="hidden" value="@Model.Revision">
                     <input name="isNew" type="hidden" value="@(Model.Selected is null ? "true" : "false")">
                     <details open>
-                        <summary>測點與底圖</summary>
+                        <summary>測點與平面圖</summary>
                         <div>
                             <label>測點名稱（Name） <input id="point-name" name="point" value="@Model.Selected?.Point" required maxlength="256" readonly="@(Model.Selected is not null)"></label>
                             @if (Model.Selected is null)
                             {
                                 <p><button type="button" id="load-tags" aria-haspopup="dialog">從 WebAccess 選取測點</button></p>
                             }
-                            <label>共用底圖
+                            <label>共用平面圖
                                 <select name="sharedFile" id="shared-file" data-current-floor="@Model.Selected?.File">
-                                    <option value="">@(Model.Selected is null ? "請選擇底圖" : "沿用目前底圖")</option>
+                                    <option value="">@(Model.Selected is null ? "請選擇平面圖" : "沿用目前的平面圖")</option>
                                     @foreach (WebAccess.Media.FloorImage floor in Model.FloorImages)
                                     {
                                         <option value="@floor.File">@floor.Name</option>
                                     }
                                 </select>
                             </label>
-                            <label>或上傳新底圖 <input name="image" id="file" type="file" accept=".png,.jpg,.jpeg"></label>
+                            <label>或上傳新平面圖 <input name="image" id="file" type="file" accept=".png,.jpg,.jpeg"></label>
                             <label class="check display-mode">
                                 <input type="checkbox" name="imageOnly" id="image-only" value="true"
                                        checked="@(Model.Selected?.ImageOnly ?? false)" aria-labelledby="image-only-label" aria-describedby="image-only-help">
                                 <span>
-                                    <strong id="image-only-label">全頁只顯示圖片</strong>
+                                    <strong id="image-only-label">全頁只顯示平面圖</strong>
                                     <small id="image-only-help">勾選後隱藏警報文字與圖示，無需設定位置。</small>
                                 </span>
                             </label>
@@ -726,7 +726,7 @@ function renderLibrary(images) {
         card.querySelector('img').src = '/engineering-media/' + encodeURIComponent(floor.file);
         card.querySelector('span').textContent = floor.name;
         remove.dataset.delete = floor.file;
-        remove.setAttribute('aria-label', '刪除 ' + floor.name);
+        remove.setAttribute('aria-label', '刪除平面圖 ' + floor.name);
         grid.append(entry);
     }
     sharedFile.value = images.some(floor => floor.file === selectedFile) ? selectedFile : '';
@@ -749,7 +749,7 @@ async function updateLibrary(endpoint, body, pending) {
             renderLibrary(result.images);
         }
     } catch {
-        libraryStatus.textContent = '圖庫操作未完成。請確認連線或檔案大小後再試。';
+        libraryStatus.textContent = '共用平面圖操作未完成。請確認連線或檔案大小後再試。';
     } finally {
         libraryBusy = false;
         uploadInput.disabled = false;
@@ -758,7 +758,7 @@ async function updateLibrary(endpoint, body, pending) {
     }
 }
 uploadInput.addEventListener('change', () => {
-    if (uploadInput.files.length) updateLibrary(libraryForm.action, new FormData(libraryForm), '正在上傳底圖…');
+    if (uploadInput.files.length) updateLibrary(libraryForm.action, new FormData(libraryForm), '正在上傳平面圖…');
 });
 grid.addEventListener('click', event => {
     const card = event.target.closest('[data-floor]');
@@ -775,6 +775,6 @@ grid.addEventListener('click', event => {
     const body = new FormData(libraryForm);
     body.delete('images');
     body.set('file', remove.dataset.delete);
-    updateLibrary('/engineering?handler=DeleteFloorImage', body, '正在刪除底圖…');
+    updateLibrary('/engineering?handler=DeleteFloorImage', body, '正在刪除平面圖…');
 });
 </script>
