@@ -9,7 +9,8 @@ public sealed record PlaylistItem(string File, string Name, int Seconds)
 
 public sealed record PointPlan(string Point, string File, int X, int Y,
     string Icon = PointPlan.DefaultIcon, bool Flash = true, bool ImageOnly = false, string? IconFile = null,
-    string? AlarmText = null, int AlarmTextSize = PointPlan.DefaultAlarmTextSize, int IconSize = PointPlan.DefaultIconSize)
+    string? AlarmText = null, int AlarmTextSize = PointPlan.DefaultAlarmTextSize, int IconSize = PointPlan.DefaultIconSize,
+    bool AlarmSoundEnabled = false, string AlarmTone = PointPlan.DefaultAlarmTone, int AlarmVolume = PointPlan.DefaultAlarmVolume)
 {
     public const string DefaultIcon = "sos";
     public const int DefaultCoordinate = 50;
@@ -19,6 +20,10 @@ public sealed record PointPlan(string Point, string File, int X, int Y,
     public const int MaxAlarmTextSize = 120;
     public const int MinIconSize = 20;
     public const int MaxIconSize = 160;
+    public const string DefaultAlarmTone = "chime";
+    public const int DefaultAlarmVolume = 70;
+    public const int MinAlarmVolume = 1;
+    public const int MaxAlarmVolume = 100;
 }
 public sealed record FloorImage(string File, string Name);
 public sealed record StandbyMedia(string File, string Name);

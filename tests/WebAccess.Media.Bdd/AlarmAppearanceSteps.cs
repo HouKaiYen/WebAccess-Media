@@ -28,6 +28,36 @@ public sealed class AlarmAppearanceSteps : IDisposable
         Assert.That(_plan?.IconSize, Is.EqualTo(PointPlan.DefaultIconSize));
     }
 
+    [Then("警報提示音預設關閉")]
+    public void ThenAlarmSoundIsOff()
+    {
+        Assert.That(_plan?.AlarmSoundEnabled, Is.False);
+        Assert.That(_plan?.AlarmTone, Is.EqualTo(PointPlan.DefaultAlarmTone));
+        Assert.That(_plan?.AlarmVolume, Is.EqualTo(PointPlan.DefaultAlarmVolume));
+    }
+
+    [When("管理員儲存純平面圖模式並啟用雙音提示及 45% 音量")]
+    public void WhenImageOnlySoundSaved()
+    {
+        PlayerSettings storage = new(_directory.FullName);
+        PointPlan configured = _plan! with
+        {
+            ImageOnly = true, AlarmSoundEnabled = true, AlarmTone = "double-beep", AlarmVolume = 45
+        };
+        Assert.That(storage.Save(storage.Read() with { PointPlans = [configured] }), Is.True);
+        _plan = storage.Read().PointPlans!.Single();
+    }
+
+    [Then("顯示頁沿用儲存的雙音提示與音量")]
+    public void ThenSavedSoundIsUsed()
+    {
+        PointPlan? marker = AlarmDisplay.SelectRegistered([_alarm!], [_plan!]).Marker;
+        Assert.That(marker?.ImageOnly, Is.True);
+        Assert.That(marker?.AlarmSoundEnabled, Is.True);
+        Assert.That(marker?.AlarmTone, Is.EqualTo("double-beep"));
+        Assert.That(marker?.AlarmVolume, Is.EqualTo(45));
+    }
+
     [When("上傳工程平面圖")]
     public async Task WhenUploadFloorPlan()
     {

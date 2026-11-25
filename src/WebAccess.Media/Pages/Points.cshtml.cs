@@ -9,6 +9,8 @@ public sealed class PointsModel(
 {
     public static IReadOnlyList<(string Value, string Label)> AlarmIcons { get; } =
         [("sos", "SOS 圓牌"), ("triangle", "警告三角"), ("dot", "色彩圓點"), ("button", "緊急押鈕"), ("custom", "自訂圖示")];
+    public static IReadOnlyList<(string Value, string Label)> AlarmTones { get; } =
+        [(PointPlan.DefaultAlarmTone, "柔和提示"), ("double-beep", "雙音提示"), ("pulse", "急促提示")];
     public PointPlan[] Plans { get; private set; } = [];
     public PointPlan? Selected { get; private set; }
     public string? CurrentAlarmText { get; private set; }
@@ -150,7 +152,8 @@ public sealed class PointsModel(
         string? point, int x, int y, IFormFile? image, string? sharedFile, int revision, bool isNew,
         string icon = PointPlan.DefaultIcon, bool flash = false, bool imageOnly = false, IFormFile? customIcon = null,
         string? alarmText = null, int alarmTextSize = PointPlan.DefaultAlarmTextSize, int iconSize = PointPlan.DefaultIconSize,
-        string? suggestedAlarmText = null, bool addNext = false)
+        string? suggestedAlarmText = null, bool addNext = false,
+        bool? alarmSoundEnabled = null, string? alarmTone = null, int? alarmVolume = null)
     {
         string? invalidField = ModelState.FirstOrDefault(entry => entry.Value?.Errors.Count > 0).Key;
         if (invalidField is not null)
@@ -164,6 +167,14 @@ public sealed class PointsModel(
         if (image is not null && !IsFloorImage(image))
         {
             return PointError("平面圖限 PNG 或 JPEG 格式。", 400, point, isNew, "image");
+        }
+        if (alarmTone is not null && !AlarmTones.Any(option => option.Value == alarmTone))
+        {
+            return PointError("請選擇可用的警報音效。", 400, point, isNew, "alarmTone");
+        }
+        if (alarmVolume is < PointPlan.MinAlarmVolume or > PointPlan.MaxAlarmVolume)
+        {
+            return PointError($"警報音量必須介於 {PointPlan.MinAlarmVolume}% 與 {PointPlan.MaxAlarmVolume}%。", 400, point, isNew, "alarmVolume");
         }
         if (!imageOnly)
         {
@@ -242,6 +253,12 @@ public sealed class PointsModel(
                     with { File = file, ImageOnly = true }
                 : new PointPlan(name, file, x, y, icon, flash, false, iconFile,
                     AlarmDisplay.ResolveTextOverride(alarmText, suggestedAlarmText), alarmTextSize, iconSize);
+            updated = updated with
+            {
+                AlarmSoundEnabled = alarmSoundEnabled ?? previous?.AlarmSoundEnabled ?? false,
+                AlarmTone = alarmTone ?? previous?.AlarmTone ?? PointPlan.DefaultAlarmTone,
+                AlarmVolume = alarmVolume ?? previous?.AlarmVolume ?? PointPlan.DefaultAlarmVolume
+            };
             PointPlan[] plans = playlist.PointPlans ?? [];
             plans = previous is null ? [.. plans, updated] : plans.Select(plan => plan.Point == name ? updated : plan).ToArray();
             saved = storage.Save(playlist with { PointPlans = plans, FloorImages = floorImages });
