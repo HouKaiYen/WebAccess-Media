@@ -44,7 +44,7 @@ public sealed record Playlist(int Revision, PlaylistItem[] Items, bool IsMuted, 
     public MarqueeCharacterStyle[] MarqueeCharacterStyles { get; init; } = [];
     public const int DefaultMarqueeBackgroundOpacity = 91;
     public const int DefaultMarqueeFontWeight = 400;
-    public const int DefaultMarqueeFontSize = 30;
+    public const int DefaultMarqueeFontSize = 32;
     public const int MinMarqueeFontSize = 12;
     public const int MaxMarqueeFontSize = 120;
     public const int DefaultMarqueeSpeed = 80;
