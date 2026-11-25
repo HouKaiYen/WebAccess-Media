@@ -8,6 +8,7 @@
   <ItemGroup>
     <None Update="Display.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Update="Start-WebAccess-Media.cmd" CopyToPublishDirectory="PreserveNewest" />
+    <Content Update="server-settings.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="../../README.md" Link="README.md" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

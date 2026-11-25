@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using WebAccess.Media;
 
@@ -8,10 +9,28 @@ WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationO
     Args = args,
     WebRootPath = Directory.Exists(publishedWebRoot) ? publishedWebRoot : null
 });
-if (OperatingSystem.IsWindows() && Environment.UserInteractive && args.Length == 0 &&
-    File.Exists(Path.Combine(AppContext.BaseDirectory, "tray", "WebAccess.Media.Tray.exe")))
+bool isWindowsBundle = OperatingSystem.IsWindows() &&
+    File.Exists(Path.Combine(AppContext.BaseDirectory, "tray", "WebAccess.Media.Tray.exe"));
+string serverSettingsPath = Path.Combine(AppContext.BaseDirectory, "server-settings.json");
+bool hasServerSettings = File.Exists(serverSettingsPath);
+if (string.IsNullOrWhiteSpace(builder.Configuration["urls"]) && (hasServerSettings || isWindowsBundle))
 {
-    builder.Configuration["urls"] ??= "http://127.0.0.1:3008";
+    int port = 3008;
+    if (hasServerSettings)
+    {
+        using JsonDocument serverSettings = JsonDocument.Parse(File.ReadAllText(serverSettingsPath));
+        if (serverSettings.RootElement.ValueKind != JsonValueKind.Object ||
+            !serverSettings.RootElement.TryGetProperty("Port", out JsonElement configuredPort) ||
+            configuredPort.ValueKind != JsonValueKind.Number ||
+            !configuredPort.TryGetInt32(out port) || port is < 1 or > 65535)
+        {
+            throw new InvalidOperationException("server-settings.json 的 Port 必須是 1 到 65535 之間的整數。");
+        }
+    }
+    builder.Configuration["urls"] = $"http://127.0.0.1:{port}";
+}
+if (isWindowsBundle && Environment.UserInteractive && args.Length == 0)
+{
     builder.Configuration["Tray:Enabled"] ??= "true";
 }
 string settingsDirectory = builder.Configuration["Storage:Directory"] ?? PlayerSettings.DefaultDirectory;
