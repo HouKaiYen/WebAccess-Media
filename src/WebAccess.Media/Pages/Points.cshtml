@@ -110,6 +110,9 @@
     .inspector h2 { font-size: 1.1rem; }
     .inspector details { border-top: 1px solid var(--line); }
     .inspector details > div { padding: .35rem 0; }
+    .alarm-sound-settings { padding-top: .35rem; border-top: 1px solid var(--line); }
+    .alarm-sound-settings > .switch-field { margin-bottom: .45rem; }
+    .alarm-sound-settings .feedback:empty { display: none; }
     .inspector summary:focus-visible, .library-section summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .inspector input:not([type="checkbox"], [type="radio"]), .inspector select, .inspector textarea { width: 100%; min-width: 0; }
     .inspector input[readonly] { background: var(--background); }
@@ -347,6 +350,32 @@
                             </div>
                         </details>
                     </fieldset>
+                    <div class="alarm-sound-settings">
+                        <label class="switch-field">
+                            <input type="checkbox" role="switch" name="alarmSoundEnabled" id="alarm-sound-enabled" value="true"
+                                   checked="@(Model.Selected?.AlarmSoundEnabled ?? false)">
+                            <span class="switch-track" aria-hidden="true"></span>
+                            播放警報提示音
+                        </label>
+                        <input type="hidden" name="alarmSoundEnabled" value="false">
+                        <fieldset id="alarm-sound-fields" hidden="@(Model.Selected?.AlarmSoundEnabled != true)" disabled="@(Model.Selected?.AlarmSoundEnabled != true)">
+                            <label>音效
+                                <select name="alarmTone" id="alarm-tone">
+                                    @foreach ((string value, string label) in WebAccess.Media.Pages.PointsModel.AlarmTones)
+                                    {
+                                        <option value="@value" selected="@((Model.Selected?.AlarmTone ?? WebAccess.Media.PointPlan.DefaultAlarmTone) == value)">@label</option>
+                                    }
+                                </select>
+                            </label>
+                            <label>音量（%）
+                                <input name="alarmVolume" id="alarm-volume" type="number" required
+                                       min="@WebAccess.Media.PointPlan.MinAlarmVolume" max="@WebAccess.Media.PointPlan.MaxAlarmVolume"
+                                       value="@(Model.Selected?.AlarmVolume ?? WebAccess.Media.PointPlan.DefaultAlarmVolume)">
+                            </label>
+                            <button type="button" id="preview-alarm-sound">試聽音效</button>
+                            <p class="feedback" id="alarm-sound-status" role="status"></p>
+                        </fieldset>
+                    </div>
                 </form>
                 @if (Model.Selected is WebAccess.Media.PointPlan current)
                 {
@@ -404,6 +433,29 @@ function markPointDirty() {
 }
 pointForm.addEventListener('input', markPointDirty);
 pointForm.addEventListener('change', markPointDirty);
+const soundEnabled = document.getElementById('alarm-sound-enabled');
+const soundFields = document.getElementById('alarm-sound-fields');
+const soundTone = document.getElementById('alarm-tone');
+const soundVolume = document.getElementById('alarm-volume');
+const soundStatus = document.getElementById('alarm-sound-status');
+const soundPreview = new Audio();
+soundEnabled.addEventListener('change', () => {
+    soundFields.hidden = !soundEnabled.checked;
+    soundFields.disabled = !soundEnabled.checked;
+    soundPreview.pause();
+    soundStatus.textContent = '';
+});
+document.getElementById('preview-alarm-sound').addEventListener('click', async () => {
+    if (!soundVolume.reportValidity()) return;
+    soundStatus.textContent = '';
+    soundPreview.src = '/alarm-sounds/' + encodeURIComponent(soundTone.value) + '.wav';
+    soundPreview.volume = soundVolume.valueAsNumber / 100;
+    try {
+        await soundPreview.play();
+    } catch (error) {
+        if (error.name !== 'AbortError') soundStatus.textContent = '無法播放音效，請確認瀏覽器播放權限後再試。';
+    }
+});
 function revealField(field) {
     const section = field.closest('details');
     if (section) section.open = true;

@@ -34,6 +34,11 @@ p { color: #ffc47a; }
 #standby img, #standby video { width: 100%; height: 100%; max-height: none; object-fit: contain; }
 #marquee { position: fixed; }
 #status { position: relative; }
+#play-alarm-sound {
+  position: fixed; top: .75rem; right: .75rem; z-index: 1;
+  padding: .5rem .75rem; border: 1px solid #cbd6e4; border-radius: .4rem;
+  background: #101923; color: #fff; font: 1rem var(--app-font); cursor: pointer;
+}
 #plan-frame { display: inline-block; position: relative; max-width: 100%; }
 #plan { display: block; background-color: #fff; }
 body.alarm-active #plan { max-height: none; }
@@ -47,6 +52,7 @@ body.image-only #title, body.image-only #status { display: none; }
   <div id="plan-frame" hidden><img id="plan" alt="測點平面圖"><span class="alarm-icon" id="marker" hidden><img id="marker-image" alt="" hidden></span></div>
   <div id="standby" hidden></div>
   <div class="marquee" id="marquee" hidden><span></span></div>
+  <button id="play-alarm-sound" type="button" hidden>播放警報提示音</button>
   <p id="status" role="status"></p>
 </main>
 <script src="/marquee.js"></script>
@@ -60,6 +66,10 @@ const markerImage = document.getElementById('marker-image');
 const status = document.getElementById('status');
 const standby = document.getElementById('standby');
 const renderMarquee = createMarqueeRenderer(document.getElementById('marquee'));
+const alarmAudio = new Audio();
+const playAlarmSoundButton = document.getElementById('play-alarm-sound');
+let activeSound = null;
+let soundAttempt = 0;
 const preview = new URLSearchParams(location.search).get('preview') === 'idle';
 let revision = null;
 let playlist = null;
@@ -145,6 +155,31 @@ function setStandby(next) {
   renderMarquee(next);
   if (!standby.hidden) play(0);
 }
+async function playAlarmSound() {
+  const attempt = ++soundAttempt;
+  try {
+    await alarmAudio.play();
+    if (attempt === soundAttempt) playAlarmSoundButton.hidden = true;
+  } catch (error) {
+    if (attempt === soundAttempt) playAlarmSoundButton.hidden = error.name !== 'NotAllowedError';
+  }
+}
+playAlarmSoundButton.addEventListener('click', playAlarmSound);
+function updateAlarmSound(alarm, appearance) {
+  const tone = alarm && appearance?.alarmSoundEnabled ? appearance.alarmTone : null;
+  const nextSound = tone ? JSON.stringify([alarm.point, tone]) : null;
+  if (tone) alarmAudio.volume = appearance.alarmVolume / 100;
+  if (activeSound === nextSound) return;
+
+  activeSound = nextSound;
+  soundAttempt++;
+  alarmAudio.pause();
+  playAlarmSoundButton.hidden = true;
+  if (tone) {
+    alarmAudio.src = '/alarm-sounds/' + encodeURIComponent(tone) + '.wav';
+    playAlarmSound();
+  }
+}
 async function refresh() {
   try {
     const response = await fetch('/api/display', { cache: 'no-store' });
@@ -179,6 +214,7 @@ async function refresh() {
       markerImage.hidden = !iconUrl;
       if (iconUrl && markerImage.getAttribute('src') !== iconUrl) markerImage.src = iconUrl;
     }
+    updateAlarmSound(alarm, appearance);
     const lastSuccess = state.lastSuccessAt ? '，最後更新 ' + new Date(state.lastSuccessAt).toLocaleString('zh-TW') : '';
     const messages = { disconnected: 'WebAccess 連線異常' + lastSuccess, connecting: '正在連線至 WebAccess', unconfigured: '尚未設定 WebAccess' };
     showStatus(preview ? '' : messages[state.connectionStatus] || '');
