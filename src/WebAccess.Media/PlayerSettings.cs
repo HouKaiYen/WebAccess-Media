@@ -35,6 +35,13 @@ public sealed record Playlist(int Revision, PlaylistItem[] Items, bool IsMuted, 
     int MarqueeFontSize = Playlist.DefaultMarqueeFontSize, int MarqueeSpeed = Playlist.DefaultMarqueeSpeed,
     StandbyMedia[]? MediaLibrary = null)
 {
+    public bool MarqueeEnabled { get; init; } = true;
+    public string MarqueeTextColor { get; init; } = "#ffffff";
+    public string MarqueeBackgroundColor { get; init; } = "#101923";
+    public int MarqueeBackgroundOpacity { get; init; } = DefaultMarqueeBackgroundOpacity;
+    public int MarqueeFontWeight { get; init; } = DefaultMarqueeFontWeight;
+    public const int DefaultMarqueeBackgroundOpacity = 91;
+    public const int DefaultMarqueeFontWeight = 400;
     public const int DefaultMarqueeFontSize = 30;
     public const int MinMarqueeFontSize = 12;
     public const int MaxMarqueeFontSize = 120;
@@ -58,7 +65,7 @@ public sealed class PlayerSettings(string directory)
         {
             Playlist playlist = File.Exists(_path)
                 ? JsonSerializer.Deserialize<Playlist>(File.ReadAllText(_path)) ?? throw new InvalidDataException()
-                : new Playlist(0, [], true, "", false);
+                : new Playlist(0, [], true, "", false) { MarqueeEnabled = false };
             return playlist.MediaLibrary is null
                 ? playlist with { MediaLibrary = playlist.Items.Select(item => new StandbyMedia(item.File, item.Name)).ToArray() }
                 : playlist;

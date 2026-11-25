@@ -28,10 +28,17 @@
         [hidden] { display: none !important; }
         .options { display: grid; grid-template-columns: minmax(180px, .85fr) minmax(0, 1.15fr); align-items: start; gap: 1rem; }
         .options h2 { margin-bottom: .75rem; }
+        .marquee-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .75rem; }
+        .marquee-heading h2 { margin: 0; }
+        .marquee-heading .switch { min-height: 2.75rem; cursor: pointer; }
         .marquee-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
         .marquee-field { display: grid; gap: .3rem; min-width: 0; }
-        .marquee-field:has(select) { grid-column: 1 / -1; }
+        .marquee-position { grid-column: 1 / -1; }
         .marquee-field input[type=number], .marquee-field select { width: 100%; min-width: 0; }
+        .marquee-field input[type=color] { width: 100%; min-height: 2.5rem; padding: .3rem; cursor: pointer; }
+        .marquee-appearance { margin-top: .95rem; border-top: 1px solid var(--line); }
+        .marquee-appearance summary { padding: .65rem 0; font-weight: 600; cursor: pointer; }
+        .marquee-appearance summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         .switch input { appearance: none; width: 2.1rem; height: 1.16rem; padding: 0; border: 0; border-radius: 2rem; background: #cdd6e5; cursor: pointer; }
         .switch input::before { display: block; width: .83rem; height: .83rem; margin: .165rem; border-radius: 50%; background: #fff; content: ""; }
         .switch input:checked { background: var(--accent); }
@@ -88,11 +95,18 @@
         </section>
         <div class="options"><section class="card"><h2>影片聲音</h2><label class="switch"><input asp-for="IsMuted">靜音播放</label></section>
         <section class="card">
-            <h2>跑馬燈</h2>
-            <label for="Marquee">公告文字（留空停用）</label>
+            <div class="marquee-heading">
+                <h2>跑馬燈</h2>
+                <label class="switch">
+                    <input id="MarqueeEnabled" name="MarqueeEnabled" type="checkbox" role="switch" value="true" checked="@(Model.MarqueeEnabled == true)">
+                    啟用跑馬燈
+                </label>
+                <input type="hidden" name="MarqueeEnabled" value="false">
+            </div>
+            <label for="Marquee">公告文字</label>
             <textarea asp-for="Marquee" rows="3" maxlength="500"></textarea>
             <div class="marquee-fields">
-                <div class="marquee-field">
+                <div class="marquee-field marquee-position">
                     <label asp-for="MarqueeAtTop">顯示位置</label>
                     <select asp-for="MarqueeAtTop">
                         <option value="False">畫面下方</option>
@@ -112,6 +126,34 @@
                            data-default="@WebAccess.Media.Playlist.DefaultMarqueeSpeed">
                 </div>
             </div>
+            <details class="marquee-appearance">
+                <summary>進階外觀</summary>
+                <div class="marquee-fields">
+                    <div class="marquee-field">
+                        <label asp-for="MarqueeTextColor">文字顏色</label>
+                        <input asp-for="MarqueeTextColor" type="color">
+                    </div>
+                    <div class="marquee-field">
+                        <label asp-for="MarqueeBackgroundColor">背景顏色</label>
+                        <input asp-for="MarqueeBackgroundColor" type="color">
+                    </div>
+                    <div class="marquee-field">
+                        <label asp-for="MarqueeFontWeight">字重</label>
+                        <select asp-for="MarqueeFontWeight">
+                            <option value="400">一般</option>
+                            <option value="600">半粗體</option>
+                            <option value="700">粗體</option>
+                        </select>
+                    </div>
+                    <div class="marquee-field">
+                        <label asp-for="MarqueeBackgroundOpacity">背景不透明度（%）</label>
+                        <input asp-for="MarqueeBackgroundOpacity" type="number" required min="0" max="100"
+                               data-default="@WebAccess.Media.Playlist.DefaultMarqueeBackgroundOpacity"
+                               aria-describedby="marquee-opacity-help">
+                        <small id="marquee-opacity-help">0% 為透明。</small>
+                    </div>
+                </div>
+            </details>
         </section></div>
     </form>
 </main>
@@ -293,6 +335,10 @@ function setRowRemoved(row, removed) {
     markDirty();
 }
 playlistForm.addEventListener('input', markDirty);
+playlistForm.addEventListener('invalid', event => {
+    const appearance = event.target.closest('.marquee-appearance');
+    if (appearance) appearance.open = true;
+}, true);
 playlistForm.addEventListener('submit', event => {
     if (mediaBusy) {
         event.preventDefault();
@@ -361,9 +407,14 @@ document.getElementById('open-preview').addEventListener('click', () => {
     dialog.showModal();
     renderPreviewMarquee({
         marquee: document.getElementById('Marquee').value.trim(),
+        marqueeEnabled: document.getElementById('MarqueeEnabled').checked,
         marqueeAtTop: document.getElementById('MarqueeAtTop').value === 'True',
         marqueeFontSize: marqueeValue('MarqueeFontSize'),
-        marqueeSpeed: marqueeValue('MarqueeSpeed')
+        marqueeSpeed: marqueeValue('MarqueeSpeed'),
+        marqueeTextColor: document.getElementById('MarqueeTextColor').value,
+        marqueeBackgroundColor: document.getElementById('MarqueeBackgroundColor').value,
+        marqueeBackgroundOpacity: marqueeValue('MarqueeBackgroundOpacity'),
+        marqueeFontWeight: Number(document.getElementById('MarqueeFontWeight').value)
     });
     if (rows.length) play(0);
     else stage.textContent = '播放清單目前是空的';
