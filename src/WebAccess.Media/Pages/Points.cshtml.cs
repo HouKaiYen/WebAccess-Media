@@ -19,6 +19,12 @@ public sealed class PointsModel(
     public int Revision { get; private set; }
     [TempData] public string? Feedback { get; set; }
 
+    public string StorageLocation => OperatingSystem.IsWindows() &&
+        string.Equals(Path.TrimEndingDirectorySeparator(storage.StorageDirectory), PlayerSettings.DefaultDirectory,
+            StringComparison.OrdinalIgnoreCase)
+        ? @"%LOCALAPPDATA%\WebAccess-Media"
+        : storage.StorageDirectory;
+
     public async Task<IActionResult> OnGetTagsAsync(string? point)
     {
         try
