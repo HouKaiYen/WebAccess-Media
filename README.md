@@ -6,13 +6,15 @@
 
 1. 取得 `WebAccess-Media-win-x64.zip`。GitHub Actions 有執行記錄時，可從 Windows CI 的 Artifacts 下載同名套件。
 2. 完整解壓縮至固定資料夾，例如 `C:\WebAccess-Media`。套件已包含 .NET Runtime。
-3. 雙擊有藍色圖示的 `WebAccess.Media.exe`，保持視窗開啟。也可使用 `Start-WebAccess-Media.cmd` 啟動。
+3. 雙擊有藍色圖示的 `WebAccess.Media.exe`，程式會在背景執行，並在 Windows 通知區顯示圖示。
 4. 開啟 [日常管理](http://127.0.0.1:3008/settings)，可切換至工程設定或顯示頁。
-5. 在程式視窗按 `Ctrl+C` 停止監控。
+5. 在通知區圖示按右鍵，選擇「結束 WebAccess Media」停止監控。
+
+需要查看啟動訊息時，可以從 PowerShell 執行 `.\Start-WebAccess-Media.cmd`。此入口會保留命令視窗，仍可從通知區結束程式。
 
 若要變更 Port，請停止程式，編輯與 `WebAccess.Media.exe` 同一資料夾中的 `server-settings.json`，再啟動 `.exe` 或 `.cmd`。兩種入口都讀取其中的 `Port`，預設為 `3008`。指定 `--urls` 時會優先使用該監聽網址。
 
-同一個資料儲存目錄只能由一個服務使用。若已有服務在執行，重複啟動時會在主控台提示目前的監聽網址。
+同一個資料儲存目錄只能由一個服務使用。若已有服務在執行，重複啟動時會提示目前的監聽網址。
 
 ## Windows 通知區
 

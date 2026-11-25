@@ -4,6 +4,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationIcon>../../assets/WebAccessMedia.ico</ApplicationIcon>
+    <OutputType Condition="$([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('win-'))">WinExe</OutputType>
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="WebAccess.Media.Bdd" />
