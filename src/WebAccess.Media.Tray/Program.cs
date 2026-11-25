@@ -45,17 +45,20 @@ internal static class Program
         ApplicationConfiguration.Initialize();
         using ApplicationContext context = new();
         using ContextMenuStrip menu = new();
+        string portLabel = $"Port {address.Port}";
+        string tooltipPrefix = $"WebAccess Media · {portLabel}";
+        ToolStripMenuItem port = new(portLabel) { Enabled = false };
         ToolStripMenuItem status = new("正在檢查服務…") { Enabled = false };
         ToolStripMenuItem open = new("開啟日常管理") { Enabled = startupId is null };
         ToolStripMenuItem exit = new("結束 WebAccess Media") { Enabled = startupId is null };
         ToolStripMenuItem closeIcon = new("關閉通知區圖示") { Visible = startupId is not null };
-        menu.Items.AddRange([status, open, new ToolStripSeparator(), exit, closeIcon]);
+        menu.Items.AddRange([port, status, open, new ToolStripSeparator(), exit, closeIcon]);
         using Stream iconStream = typeof(Program).Assembly.GetManifestResourceStream("WebAccess.Media.Tray.AppIcon")!;
         using Icon applicationIcon = new(iconStream, SystemInformation.SmallIconSize);
         using NotifyIcon icon = new()
         {
             Icon = applicationIcon,
-            Text = "WebAccess Media",
+            Text = $"{tooltipPrefix} · {status.Text}",
             ContextMenuStrip = menu,
             Visible = true
         };
@@ -66,6 +69,11 @@ internal static class Program
         };
         using System.Windows.Forms.Timer timer = new() { Interval = 3000 };
         bool isStopping = false;
+        void ShowStatus(string text)
+        {
+            status.Text = text;
+            icon.Text = $"{tooltipPrefix} · {text}";
+        }
         void CloseIcon()
         {
             icon.Visible = false;
@@ -92,9 +100,7 @@ internal static class Program
                 {
                     open.Enabled = available;
                     exit.Enabled = available;
-                    string text = available ? DescribeStatus(result!.ConnectionStatus) : "服務未執行";
-                    status.Text = text;
-                    icon.Text = $"WebAccess Media · {text}";
+                    ShowStatus(available ? DescribeStatus(result!.ConnectionStatus) : "服務未執行");
                 }
             }
             finally
@@ -119,14 +125,13 @@ internal static class Program
             bool signaled = shutdown?.Set() ?? SignalStartupShutdown(startupId!);
             if (!signaled)
             {
-                status.Text = "無法聯絡背景服務";
+                ShowStatus("無法聯絡背景服務");
                 return;
             }
             isStopping = true;
             exit.Enabled = false;
             open.Enabled = false;
-            status.Text = "正在結束服務…";
-            icon.Text = $"WebAccess Media · {status.Text}";
+            ShowStatus("正在結束服務…");
         };
         timer.Start();
         Application.Run(context);
