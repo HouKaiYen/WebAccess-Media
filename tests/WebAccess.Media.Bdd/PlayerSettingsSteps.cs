@@ -73,6 +73,46 @@ public sealed class PlayerSettingsSteps : IDisposable
         });
     }
 
+    [Then("舊公告仍啟用並保留原本的外觀")]
+    public void ThenLegacyMarqueeAppearance()
+    {
+        Playlist playlist = Open().Read();
+        Assert.Multiple(() =>
+        {
+            Assert.That(playlist.MarqueeEnabled, Is.True);
+            Assert.That(playlist.MarqueeTextColor, Is.EqualTo("#ffffff"));
+            Assert.That(playlist.MarqueeBackgroundColor, Is.EqualTo("#101923"));
+            Assert.That(playlist.MarqueeFontWeight, Is.EqualTo(400));
+            Assert.That(playlist.MarqueeBackgroundOpacity, Is.EqualTo(91));
+        });
+    }
+
+    [When("管理員停用跑馬燈並儲存自訂外觀")]
+    public void WhenMarqueeDisabled()
+    {
+        PlayerSettings storage = Open();
+        Assert.That(storage.Save(storage.Read() with
+        {
+            MarqueeEnabled = false, MarqueeTextColor = "#ffdd66", MarqueeBackgroundColor = "#202040",
+            MarqueeFontWeight = 700, MarqueeBackgroundOpacity = 65
+        }), Is.True);
+    }
+
+    [Then("重載後跑馬燈仍停用且保留公告與自訂外觀")]
+    public void ThenDisabledMarqueeSettingsPersist()
+    {
+        Playlist playlist = Open().Read();
+        Assert.Multiple(() =>
+        {
+            Assert.That(playlist.MarqueeEnabled, Is.False);
+            Assert.That(playlist.Marquee, Is.EqualTo("公告"));
+            Assert.That(playlist.MarqueeTextColor, Is.EqualTo("#ffdd66"));
+            Assert.That(playlist.MarqueeBackgroundColor, Is.EqualTo("#202040"));
+            Assert.That(playlist.MarqueeFontWeight, Is.EqualTo(700));
+            Assert.That(playlist.MarqueeBackgroundOpacity, Is.EqualTo(65));
+        });
+    }
+
     [Given("舊版播放清單引用一張已上傳的圖片")]
     public void GivenLegacyMedia()
     {

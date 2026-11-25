@@ -81,7 +81,9 @@ app.MapGet("/api/display", (WebAccessAlarmMonitor monitor, PlayerSettings player
         Playlist = new
         {
             playlist.Revision, playlist.Items, playlist.IsMuted, playlist.Marquee,
-            playlist.MarqueeAtTop, playlist.MarqueeFontSize, playlist.MarqueeSpeed
+            playlist.MarqueeAtTop, playlist.MarqueeFontSize, playlist.MarqueeSpeed,
+            playlist.MarqueeEnabled, playlist.MarqueeTextColor, playlist.MarqueeBackgroundColor,
+            playlist.MarqueeBackgroundOpacity, playlist.MarqueeFontWeight
         }
     });
 });

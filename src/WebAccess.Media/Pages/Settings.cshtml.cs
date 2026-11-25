@@ -8,10 +8,16 @@ namespace WebAccess.Media.Pages;
 [RequestSizeLimit(102 * 1024 * 1024)]
 public sealed class SettingsModel(PlayerSettings storage) : PageModel
 {
+    private const string HexColor = "^#[0-9a-fA-F]{6}$";
     [BindProperty] public int Revision { get; set; }
     [BindProperty] public bool IsMuted { get; set; }
     [BindProperty] public bool MarqueeAtTop { get; set; }
     [BindProperty] public string? Marquee { get; set; }
+    [BindProperty] public bool? MarqueeEnabled { get; set; }
+    [BindProperty, RegularExpression(HexColor)] public string? MarqueeTextColor { get; set; }
+    [BindProperty, RegularExpression(HexColor)] public string? MarqueeBackgroundColor { get; set; }
+    [BindProperty, Range(0, 100)] public int? MarqueeBackgroundOpacity { get; set; }
+    [BindProperty] public int? MarqueeFontWeight { get; set; }
     [BindProperty, Range(Playlist.MinMarqueeFontSize, Playlist.MaxMarqueeFontSize)]
     public int? MarqueeFontSize { get; set; }
     [BindProperty, Range(Playlist.MinMarqueeSpeed, Playlist.MaxMarqueeSpeed)]
@@ -26,6 +32,11 @@ public sealed class SettingsModel(PlayerSettings storage) : PageModel
         IsMuted = playlist.IsMuted;
         MarqueeAtTop = playlist.MarqueeAtTop;
         Marquee = playlist.Marquee;
+        MarqueeEnabled = playlist.MarqueeEnabled;
+        MarqueeTextColor = playlist.MarqueeTextColor;
+        MarqueeBackgroundColor = playlist.MarqueeBackgroundColor;
+        MarqueeBackgroundOpacity = playlist.MarqueeBackgroundOpacity;
+        MarqueeFontWeight = playlist.MarqueeFontWeight;
         MarqueeFontSize = playlist.MarqueeFontSize;
         MarqueeSpeed = playlist.MarqueeSpeed;
         Items = playlist.Items.Select(ItemInput.FromPlaylistItem).ToList();
@@ -165,6 +176,20 @@ public sealed class SettingsModel(PlayerSettings storage) : PageModel
         {
             Feedback = $"跑馬燈移動速度須介於 {Playlist.MinMarqueeSpeed} 和 {Playlist.MaxMarqueeSpeed} 像素／秒。";
         }
+        else if (ModelState[nameof(MarqueeTextColor)]?.Errors.Count > 0 ||
+            ModelState[nameof(MarqueeBackgroundColor)]?.Errors.Count > 0)
+        {
+            Feedback = "請用色彩選擇器設定跑馬燈的文字色和背景色。";
+        }
+        else if (ModelState[nameof(MarqueeBackgroundOpacity)]?.Errors.Count > 0)
+        {
+            Feedback = "跑馬燈背景不透明度須介於 0% 和 100%。";
+        }
+        else if (MarqueeFontWeight is not (null or 400 or 600 or 700) ||
+            ModelState[nameof(MarqueeFontWeight)]?.Errors.Count > 0)
+        {
+            Feedback = "請選擇有效的跑馬燈字重。";
+        }
         else if (!ModelState.IsValid || (Marquee?.Length ?? 0) > 500 || Items.Count != submittedFiles.Count ||
             !knownFiles.SetEquals(submittedFiles.Concat(removed)) || Items.Any(item => !removed.Contains(item.File) &&
                 (string.IsNullOrWhiteSpace(item.Name) || item.Name.Length > 200 || item.Seconds is < 3 or > 300)))
@@ -179,7 +204,12 @@ public sealed class SettingsModel(PlayerSettings storage) : PageModel
             {
                 Items = items, IsMuted = IsMuted, Marquee = Marquee?.Trim() ?? "", MarqueeAtTop = MarqueeAtTop,
                 MarqueeFontSize = MarqueeFontSize ?? playlist.MarqueeFontSize,
-                MarqueeSpeed = MarqueeSpeed ?? playlist.MarqueeSpeed
+                MarqueeSpeed = MarqueeSpeed ?? playlist.MarqueeSpeed,
+                MarqueeEnabled = MarqueeEnabled ?? playlist.MarqueeEnabled,
+                MarqueeTextColor = MarqueeTextColor?.ToLowerInvariant() ?? playlist.MarqueeTextColor,
+                MarqueeBackgroundColor = MarqueeBackgroundColor?.ToLowerInvariant() ?? playlist.MarqueeBackgroundColor,
+                MarqueeBackgroundOpacity = MarqueeBackgroundOpacity ?? playlist.MarqueeBackgroundOpacity,
+                MarqueeFontWeight = MarqueeFontWeight ?? playlist.MarqueeFontWeight
             }))
             {
                 Feedback = "設定已更新，請檢查最新清單再編輯。";
